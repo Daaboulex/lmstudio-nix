@@ -8,15 +8,17 @@
   stdenv,
   ocl-icd,
   vulkan-loader,
+  # Arguments for multi-channel support (stable / beta)
+  version,
+  hash,
 }:
 
 let
   pname = "lmstudio";
-  version = "0.4.7-4";
 
   src = fetchurl {
     url = "https://installers.lmstudio.ai/linux/x64/${version}/LM-Studio-${version}-x64.AppImage";
-    hash = "sha256-2dSgBr2B+PIUi/YCBmXDWXQWEEId6Qymh1JQuAPG/xU=";
+    inherit hash;
   };
 
   appimageContents = appimageTools.extractType2 { inherit pname version src; };
@@ -48,9 +50,10 @@ appimageTools.wrapType2 {
       gm convert "$src_icon" -resize "$size" "$out/share/icons/hicolor/$size/apps/lm-studio.png"
     done
 
-    # GPU driver injection for all wrapped binaries
+    # GPU driver injection + Wayland support + window class for icon
     wrapProgram $out/bin/${pname} \
       --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib" \
+      --add-flags "--class=LM-Studio" \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
 
     # Extract and patch the bundled lms CLI (available inside the AppImage)

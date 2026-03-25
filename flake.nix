@@ -21,7 +21,8 @@
     in
     {
       overlays.default = final: _prev: {
-        lmstudio = final.callPackage ./desktop.nix { };
+        lmstudio = final.callPackage ./stable.nix { };
+        lmstudio-beta = final.callPackage ./beta.nix { };
         lmstudio-server = final.callPackage ./server.nix { };
       };
 
@@ -34,7 +35,10 @@
           };
         in
         {
-          lmstudio = pkgs.callPackage ./desktop.nix { };
+          stable = pkgs.callPackage ./stable.nix { };
+          beta = pkgs.callPackage ./beta.nix { };
+          lmstudio = self.packages.${system}.stable;
+          lmstudio-beta = self.packages.${system}.beta;
           lmstudio-server = pkgs.callPackage ./server.nix { };
           default = self.packages.${system}.lmstudio;
         }
@@ -44,6 +48,10 @@
         lmstudio = {
           type = "app";
           program = "${self.packages.${system}.lmstudio}/bin/lmstudio";
+        };
+        lmstudio-beta = {
+          type = "app";
+          program = "${self.packages.${system}.lmstudio-beta}/bin/lmstudio";
         };
         lmstudio-server = {
           type = "app";

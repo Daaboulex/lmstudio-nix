@@ -3,7 +3,7 @@
   "upstream": {
     "type": "custom"
   },
-  "packageFile": "desktop.nix",
+  "packageFile": "stable.nix",
   "hashes": [
     "hash"
   ],

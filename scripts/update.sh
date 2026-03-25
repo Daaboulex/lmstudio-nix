@@ -33,9 +33,24 @@ fi
 
 log "Latest desktop version: $LATEST_DESKTOP_VERSION"
 
-# --- Get current desktop version ---
-CURRENT_DESKTOP_VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' desktop.nix | head -1)
-log "Current desktop version: $CURRENT_DESKTOP_VERSION"
+# --- Get current stable version ---
+CURRENT_DESKTOP_VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' stable.nix | head -1)
+log "Current stable version: $CURRENT_DESKTOP_VERSION"
+
+# --- Fetch latest beta version ---
+log "Checking latest beta version..."
+BETA_URL="https://lmstudio.ai/download/latest/linux/x64?channel=beta"
+LATEST_BETA_VERSION=$(curl -sfL -o /dev/null -w '%{url_effective}' "$BETA_URL" 2>/dev/null | grep -oP '\d+\.\d+\.\d+(-\d+|-beta\.\d+)?' || true)
+
+if [ -z "$LATEST_BETA_VERSION" ]; then
+  LATEST_BETA_VERSION="$LATEST_DESKTOP_VERSION"
+  log "No separate beta version found, using stable: $LATEST_BETA_VERSION"
+fi
+
+log "Latest beta version: $LATEST_BETA_VERSION"
+
+CURRENT_BETA_VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' beta.nix | head -1)
+log "Current beta version: $CURRENT_BETA_VERSION"
 
 # --- Fetch latest server version ---
 log "Checking latest server version..."
@@ -53,11 +68,17 @@ log "Current server version: $CURRENT_SERVER_VERSION"
 
 # --- Compare versions ---
 DESKTOP_CHANGED=false
+BETA_CHANGED=false
 SERVER_CHANGED=false
 
 if [ "$CURRENT_DESKTOP_VERSION" != "$LATEST_DESKTOP_VERSION" ]; then
   DESKTOP_CHANGED=true
-  log "Desktop update found: $CURRENT_DESKTOP_VERSION → $LATEST_DESKTOP_VERSION"
+  log "Stable update found: $CURRENT_DESKTOP_VERSION → $LATEST_DESKTOP_VERSION"
+fi
+
+if [ "$CURRENT_BETA_VERSION" != "$LATEST_BETA_VERSION" ]; then
+  BETA_CHANGED=true
+  log "Beta update found: $CURRENT_BETA_VERSION → $LATEST_BETA_VERSION"
 fi
 
 if [ "$CURRENT_SERVER_VERSION" != "$LATEST_SERVER_VERSION" ]; then
@@ -65,7 +86,7 @@ if [ "$CURRENT_SERVER_VERSION" != "$LATEST_SERVER_VERSION" ]; then
   log "Server update found: $CURRENT_SERVER_VERSION → $LATEST_SERVER_VERSION"
 fi
 
-if [ "$DESKTOP_CHANGED" = false ] && [ "$SERVER_CHANGED" = false ]; then
+if [ "$DESKTOP_CHANGED" = false ] && [ "$BETA_CHANGED" = false ] && [ "$SERVER_CHANGED" = false ]; then
   log "Already up to date"
   output "updated" "false"
   exit 0
@@ -78,25 +99,46 @@ output "upstream_url" "https://lmstudio.ai/"
 
 DUMMY_HASH="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
-# --- Update desktop ---
+# --- Update stable ---
 if [ "$DESKTOP_CHANGED" = true ]; then
-  log "Updating desktop.nix version..."
-  sed -i "s|version = \"$CURRENT_DESKTOP_VERSION\"|version = \"$LATEST_DESKTOP_VERSION\"|" desktop.nix
+  log "Updating stable.nix version..."
+  sed -i "s|version = \"$CURRENT_DESKTOP_VERSION\"|version = \"$LATEST_DESKTOP_VERSION\"|" stable.nix
 
-  log "Extracting desktop hash..."
-  CURRENT_HASH=$(grep -oP 'hash\s*=\s*"sha256-\K[^"]*' desktop.nix | head -1)
-  sed -i "s|hash = \"sha256-${CURRENT_HASH}\"|hash = \"${DUMMY_HASH}\"|" desktop.nix
+  log "Extracting stable hash..."
+  CURRENT_HASH=$(grep -oP 'hash\s*=\s*"sha256-\K[^"]*' stable.nix | head -1)
+  sed -i "s|hash = \"sha256-${CURRENT_HASH}\"|hash = \"${DUMMY_HASH}\"|" stable.nix
   BUILD_OUTPUT=$(nix build .#lmstudio 2>&1 || true)
   NEW_HASH=$(echo "$BUILD_OUTPUT" | grep -oP 'got:\s+sha256-\K\S+' | head -1)
 
   if [ -z "$NEW_HASH" ]; then
-    err "Failed to extract desktop hash"
+    err "Failed to extract stable hash"
     output "error_type" "hash-extraction"
     exit 1
   fi
 
-  sed -i "s|hash = \"${DUMMY_HASH}\"|hash = \"sha256-${NEW_HASH}\"|" desktop.nix
-  log "Desktop hash: sha256-$NEW_HASH"
+  sed -i "s|hash = \"${DUMMY_HASH}\"|hash = \"sha256-${NEW_HASH}\"|" stable.nix
+  log "Stable hash: sha256-$NEW_HASH"
+fi
+
+# --- Update beta ---
+if [ "$BETA_CHANGED" = true ]; then
+  log "Updating beta.nix version..."
+  sed -i "s|version = \"$CURRENT_BETA_VERSION\"|version = \"$LATEST_BETA_VERSION\"|" beta.nix
+
+  log "Extracting beta hash..."
+  CURRENT_HASH=$(grep -oP 'hash\s*=\s*"sha256-\K[^"]*' beta.nix | head -1)
+  sed -i "s|hash = \"sha256-${CURRENT_HASH}\"|hash = \"${DUMMY_HASH}\"|" beta.nix
+  BUILD_OUTPUT=$(nix build .#lmstudio-beta 2>&1 || true)
+  NEW_HASH=$(echo "$BUILD_OUTPUT" | grep -oP 'got:\s+sha256-\K\S+' | head -1)
+
+  if [ -z "$NEW_HASH" ]; then
+    err "Failed to extract beta hash"
+    output "error_type" "hash-extraction"
+    exit 1
+  fi
+
+  sed -i "s|hash = \"${DUMMY_HASH}\"|hash = \"sha256-${NEW_HASH}\"|" beta.nix
+  log "Beta hash: sha256-$NEW_HASH"
 fi
 
 # --- Update server ---
