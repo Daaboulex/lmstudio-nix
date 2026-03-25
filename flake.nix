@@ -3,6 +3,12 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+    # ROCm 6.x libs — LM Studio's ROCm llama.cpp engine is compiled against ROCm 6.x.
+    # nixpkgs-unstable has ROCm 7.x (ABI-incompatible). nixos-25.05 has ROCm 6.3.3.
+    # Remove this input once LM Studio ships a ROCm 7.x engine.
+    nixpkgs-rocm6.url = "github:NixOS/nixpkgs/nixos-25.05";
+
     git-hooks = {
       url = "github:cachix/git-hooks.nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -13,16 +19,23 @@
     {
       self,
       nixpkgs,
+      nixpkgs-rocm6,
       git-hooks,
     }:
     let
       systems = [ "x86_64-linux" ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
+      # ROCm 6.x packages for LM Studio's pre-compiled ROCm engine
+      rocm6Pkgs = system: import nixpkgs-rocm6 { localSystem.system = system; };
     in
     {
       overlays.default = final: _prev: {
-        lmstudio = final.callPackage ./stable.nix { };
-        lmstudio-beta = final.callPackage ./beta.nix { };
+        lmstudio = final.callPackage ./stable.nix {
+          rocm6 = rocm6Pkgs final.stdenv.hostPlatform.system;
+        };
+        lmstudio-beta = final.callPackage ./beta.nix {
+          rocm6 = rocm6Pkgs final.stdenv.hostPlatform.system;
+        };
         lmstudio-server = final.callPackage ./server.nix { };
       };
 
@@ -33,10 +46,11 @@
             localSystem.system = system;
             config.allowUnfree = true;
           };
+          rocm6 = rocm6Pkgs system;
         in
         {
-          stable = pkgs.callPackage ./stable.nix { };
-          beta = pkgs.callPackage ./beta.nix { };
+          stable = pkgs.callPackage ./stable.nix { inherit rocm6; };
+          beta = pkgs.callPackage ./beta.nix { inherit rocm6; };
           lmstudio = self.packages.${system}.stable;
           lmstudio-beta = self.packages.${system}.beta;
           lmstudio-server = pkgs.callPackage ./server.nix { };

@@ -9,6 +9,9 @@
   ocl-icd,
   vulkan-loader,
   rocmPackages,
+  # ROCm 6.x from nixos-25.05 — LM Studio's ROCm engine needs 6.x ABI.
+  # Remove once LM Studio ships a ROCm 7.x engine.
+  rocm6,
   # Arguments for multi-channel support (stable / beta)
   version,
   hash,
@@ -24,21 +27,19 @@ let
 
   appimageContents = appimageTools.extractType2 { inherit pname version src; };
 
-  # LM Studio's ROCm llama.cpp engine is compiled against ROCm 6.x sonames
-  # (libhipblas.so.2, librocblas.so.4, libamdhip64.so.6) but nixpkgs has
-  # ROCm 7.x (soname .3, .5, .7). The ABI is backward-compatible, so we
-  # create symlinks from the old sonames to the new libraries.
-  rocm-compat = stdenv.mkDerivation {
-    pname = "rocm-compat-symlinks";
-    version = rocmPackages.hipblas.version;
-    dontUnpack = true;
-    installPhase = ''
-      mkdir -p $out/lib
-      ln -s ${rocmPackages.hipblas}/lib/libhipblas.so.3 $out/lib/libhipblas.so.2
-      ln -s ${rocmPackages.rocblas}/lib/librocblas.so.5 $out/lib/librocblas.so.4
-      ln -s ${rocmPackages.clr}/lib/libamdhip64.so.7 $out/lib/libamdhip64.so.6
-    '';
-  };
+  # ROCm 6.x libraries from nixos-25.05 for LM Studio's pre-compiled ROCm engine.
+  # The engine links against ROCm 6.x sonames (libhipblas.so.2, librocblas.so.4,
+  # libamdhip64.so.6). ROCm 7.x (current nixpkgs) has ABI-incompatible sonames
+  # (.so.3, .so.5, .so.7). Using actual ROCm 6.x libs instead of compat symlinks.
+  rocm6Libs = [
+    rocm6.rocmPackages.clr
+    rocm6.rocmPackages.rocm-runtime
+    rocm6.rocmPackages.rocblas
+    rocm6.rocmPackages.hipblas
+    rocm6.rocmPackages.rocm-smi
+  ];
+
+  rocm6LibPath = lib.makeLibraryPath rocm6Libs;
 in
 appimageTools.wrapType2 {
   inherit pname version src;
@@ -52,15 +53,15 @@ appimageTools.wrapType2 {
     pkgs: with pkgs; [
       ocl-icd
       vulkan-loader
-      # ROCm runtime for AMD GPU acceleration (llama.cpp ROCm backend)
+      # ROCm 7.x runtime (for future engine updates)
       rocmPackages.clr
       rocmPackages.rocm-runtime
       rocmPackages.rocblas
       rocmPackages.hipblas
       rocmPackages.rocm-smi
-      # ROCm 6.x → 7.x soname compatibility symlinks
-      rocm-compat
-    ];
+    ]
+    # ROCm 6.x libs for current LM Studio engine
+    ++ rocm6Libs;
 
   extraInstallCommands = ''
     # Desktop file — fix Exec, Icon, and StartupWMClass to match our binary name
@@ -78,9 +79,9 @@ appimageTools.wrapType2 {
       ln -s lmstudio.png "$out/share/icons/hicolor/$size/apps/lm-studio.png"
     done
 
-    # GPU driver injection + ROCm compat + Wayland support + window class for icon
+    # GPU driver injection + ROCm 6.x libs + Wayland support + window class for icon
     wrapProgram $out/bin/${pname} \
-      --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib:${rocm-compat}/lib:${rocmPackages.clr}/lib:${rocmPackages.rocm-runtime}/lib:${rocmPackages.rocblas}/lib:${rocmPackages.hipblas}/lib:${rocmPackages.rocm-smi}/lib" \
+      --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib:${rocm6LibPath}" \
       --add-flags "--class=LM-Studio" \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
 
