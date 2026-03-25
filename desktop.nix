@@ -57,6 +57,7 @@ appimageTools.wrapType2 {
     pkgs: with pkgs; [
       ocl-icd
       vulkan-loader
+      rocmPackages.rocm-smi # GPU monitoring (resource monitor)
     ];
 
   extraInstallCommands = ''
