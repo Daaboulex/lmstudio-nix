@@ -65,22 +65,20 @@ appimageTools.wrapType2 {
     install -Dm444 ${appimageContents}/lm-studio.desktop -t $out/share/applications
     substituteInPlace $out/share/applications/lm-studio.desktop \
       --replace-fail 'Exec=AppRun --no-sandbox %U' 'Exec=lmstudio' \
-      --replace-fail 'Icon=lm-studio' 'Icon=lmstudio' \
-      --replace-fail 'StartupWMClass=LM-Studio' 'StartupWMClass=lmstudio'
+      --replace-fail 'StartupWMClass=LM-Studio' 'StartupWMClass=lm-studio'
 
     # Icons (resize from upstream 0x0 PNG, install as both lmstudio and lm-studio)
     src_icon="${appimageContents}/usr/share/icons/hicolor/0x0/apps/lm-studio.png"
     for size in 16x16 32x32 48x48 64x64 128x128 256x256; do
       install -dm755 "$out/share/icons/hicolor/$size/apps"
-      gm convert "$src_icon" -resize "$size" "$out/share/icons/hicolor/$size/apps/lmstudio.png"
-      ln -s lmstudio.png "$out/share/icons/hicolor/$size/apps/lm-studio.png"
+      gm convert "$src_icon" -resize "$size" "$out/share/icons/hicolor/$size/apps/lm-studio.png"
     done
 
     # GPU driver injection + ROCm 6.x libs + Wayland support + window class for icon
     wrapProgram $out/bin/${pname} \
       --set HSA_ENABLE_SDMA 0 \
       --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib:${rocm6LibPath}" \
-      --add-flags "--class=lmstudio" \
+      --add-flags "--name=lm-studio" \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
 
     # Extract and patch the bundled lms CLI (available inside the AppImage)
