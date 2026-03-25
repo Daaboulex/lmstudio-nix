@@ -1,0 +1,47 @@
+name: CI
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539
+      - uses: DeterminateSystems/magic-nix-cache-action@87b14cf437d03d37989d87f0fa5ce4f5dc1a330b  # v8
+
+      - name: Eval check
+        run: nix flake check --no-build
+
+      - name: Format check
+        run: nix fmt -- --check .
+
+      - name: Build desktop
+        run: nix build .#lmstudio --out-link result-desktop --print-build-logs
+
+      - name: Build server
+        run: nix build .#lmstudio-server --out-link result-server --print-build-logs
+
+      - name: Verify desktop
+        run: |
+          find result-desktop/share/applications/ -name "*.desktop" | head -1 | grep -q . || {
+            echo "::error::No desktop file found"
+            exit 1
+          }
+
+      - name: Verify server
+        run: |
+          FOUND=$(find result-server/bin/ \( -type f -o -type l \) -name "lms" 2>/dev/null | head -1)
+          [ -n "$FOUND" ] || { echo "::error::lms binary not found"; exit 1; }
+          # ldd check (ignore libcuda — provided at runtime by GPU driver)
+          MISSING=$(ldd "$FOUND" 2>&1 | grep "not found" | grep -v libcuda || true)
+          if [ -n "$MISSING" ]; then
+            echo "::error::Missing shared libraries:"
+            echo "$MISSING"
+            exit 1
+          fi
