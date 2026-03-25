@@ -9,8 +9,8 @@
   ocl-icd,
   vulkan-loader,
   rocmPackages,
-  # ROCm 6.x from nixos-25.05 — LM Studio's ROCm engine needs 6.x ABI.
-  # Remove once LM Studio ships a ROCm 7.x engine.
+  # ROCm 6.4.3 from nixos-25.11 — LM Studio's ROCm engine needs 6.x ABI.
+  # First version with RDNA 4 (gfx1201) support. Remove once LM Studio ships ROCm 7.x.
   rocm6,
   # Arguments for multi-channel support (stable / beta)
   version,
@@ -27,10 +27,10 @@ let
 
   appimageContents = appimageTools.extractType2 { inherit pname version src; };
 
-  # ROCm 6.x libraries from nixos-25.05 for LM Studio's pre-compiled ROCm engine.
-  # The engine links against ROCm 6.x sonames (libhipblas.so.2, librocblas.so.4,
-  # libamdhip64.so.6). ROCm 7.x (current nixpkgs) has ABI-incompatible sonames
-  # (.so.3, .so.5, .so.7). Using actual ROCm 6.x libs instead of compat symlinks.
+  # ROCm 6.4.3 libraries from nixos-25.11 — injected via LD_LIBRARY_PATH only.
+  # NOT in extraPkgs to avoid pulling nixos-25.11 deps into FHS (keeps all other
+  # packages on latest nixpkgs-unstable). The nix store is bind-mounted into the
+  # FHS sandbox, so these store paths are accessible via LD_LIBRARY_PATH.
   rocm6Libs = [
     rocm6.rocmPackages.clr
     rocm6.rocmPackages.rocm-runtime
@@ -49,16 +49,15 @@ appimageTools.wrapType2 {
     makeWrapper
   ];
 
+  # All FHS packages from nixpkgs-unstable (latest). ROCm 6.x libs are NOT in
+  # extraPkgs — they're injected via LD_LIBRARY_PATH only, avoiding older deps
+  # from nixos-25.11 polluting the FHS environment. The nix store is bind-mounted
+  # into the FHS sandbox so the store paths are accessible.
   extraPkgs =
-    pkgs:
-    with pkgs;
-    [
+    pkgs: with pkgs; [
       ocl-icd
       vulkan-loader
-    ]
-    # ROCm 6.4.3 only — do NOT mix with ROCm 7.x, the dual HSA runtimes conflict.
-    # When LM Studio ships ROCm 7.x engine, replace rocm6Libs with rocmPackages.*.
-    ++ rocm6Libs;
+    ];
 
   extraInstallCommands = ''
     # Desktop file — fix Exec, Icon, and StartupWMClass to match our binary name
