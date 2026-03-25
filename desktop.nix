@@ -8,6 +8,7 @@
   stdenv,
   ocl-icd,
   vulkan-loader,
+  rocmPackages,
   # Arguments for multi-channel support (stable / beta)
   version,
   hash,
@@ -22,6 +23,22 @@ let
   };
 
   appimageContents = appimageTools.extractType2 { inherit pname version src; };
+
+  # LM Studio's ROCm llama.cpp engine is compiled against ROCm 6.x sonames
+  # (libhipblas.so.2, librocblas.so.4, libamdhip64.so.6) but nixpkgs has
+  # ROCm 7.x (soname .3, .5, .7). The ABI is backward-compatible, so we
+  # create symlinks from the old sonames to the new libraries.
+  rocm-compat = stdenv.mkDerivation {
+    pname = "rocm-compat-symlinks";
+    version = rocmPackages.hipblas.version;
+    dontUnpack = true;
+    installPhase = ''
+      mkdir -p $out/lib
+      ln -s ${rocmPackages.hipblas}/lib/libhipblas.so.3 $out/lib/libhipblas.so.2
+      ln -s ${rocmPackages.rocblas}/lib/librocblas.so.5 $out/lib/librocblas.so.4
+      ln -s ${rocmPackages.clr}/lib/libamdhip64.so.7 $out/lib/libamdhip64.so.6
+    '';
+  };
 in
 appimageTools.wrapType2 {
   inherit pname version src;
@@ -41,6 +58,8 @@ appimageTools.wrapType2 {
       rocmPackages.rocblas
       rocmPackages.hipblas
       rocmPackages.rocm-smi
+      # ROCm 6.x → 7.x soname compatibility symlinks
+      rocm-compat
     ];
 
   extraInstallCommands = ''
