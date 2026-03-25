@@ -78,9 +78,9 @@ appimageTools.wrapType2 {
       ln -s lmstudio.png "$out/share/icons/hicolor/$size/apps/lm-studio.png"
     done
 
-    # GPU driver injection + Wayland support + window class for icon
+    # GPU driver injection + ROCm compat + Wayland support + window class for icon
     wrapProgram $out/bin/${pname} \
-      --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib" \
+      --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib:${rocm-compat}/lib:${rocmPackages.clr}/lib:${rocmPackages.rocm-runtime}/lib:${rocmPackages.rocblas}/lib:${rocmPackages.hipblas}/lib:${rocmPackages.rocm-smi}/lib" \
       --add-flags "--class=LM-Studio" \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
 
