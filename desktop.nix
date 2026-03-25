@@ -80,7 +80,7 @@ appimageTools.wrapType2 {
     wrapProgram $out/bin/${pname} \
       --set HSA_ENABLE_SDMA 0 \
       --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib:${rocm6LibPath}" \
-      --add-flags "--class=LM-Studio" \
+      --add-flags "--class=lmstudio" \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
 
     # Extract and patch the bundled lms CLI (available inside the AppImage)
