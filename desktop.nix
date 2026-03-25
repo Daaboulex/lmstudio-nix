@@ -55,14 +55,9 @@ appimageTools.wrapType2 {
     [
       ocl-icd
       vulkan-loader
-      # ROCm 7.x runtime (for future engine updates)
-      rocmPackages.clr
-      rocmPackages.rocm-runtime
-      rocmPackages.rocblas
-      rocmPackages.hipblas
-      rocmPackages.rocm-smi
     ]
-    # ROCm 6.x libs for current LM Studio engine
+    # ROCm 6.4.3 only — do NOT mix with ROCm 7.x, the dual HSA runtimes conflict.
+    # When LM Studio ships ROCm 7.x engine, replace rocm6Libs with rocmPackages.*.
     ++ rocm6Libs;
 
   extraInstallCommands = ''
@@ -83,6 +78,7 @@ appimageTools.wrapType2 {
 
     # GPU driver injection + ROCm 6.x libs + Wayland support + window class for icon
     wrapProgram $out/bin/${pname} \
+      --set HSA_ENABLE_SDMA 0 \
       --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib:${rocm6LibPath}" \
       --add-flags "--class=LM-Studio" \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
