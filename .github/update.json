@@ -1,0 +1,15 @@
+{
+  "package": "lmstudio",
+  "upstream": {
+    "type": "custom"
+  },
+  "packageFile": "desktop.nix",
+  "hashes": [
+    "hash"
+  ],
+  "verify": {
+    "binary": null,
+    "args": null,
+    "check": "desktop"
+  }
+}
