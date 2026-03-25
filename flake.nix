@@ -4,10 +4,11 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    # ROCm 6.x libs — LM Studio's ROCm llama.cpp engine is compiled against ROCm 6.x.
-    # nixpkgs-unstable has ROCm 7.x (ABI-incompatible). nixos-25.05 has ROCm 6.3.3.
+    # ROCm 6.4.3 libs — LM Studio's ROCm llama.cpp engine is compiled against ROCm 6.x.
+    # nixpkgs-unstable has ROCm 7.x (ABI-incompatible). nixos-25.11 has ROCm 6.4.3
+    # which is the first version with full RDNA 4 (gfx1201) support.
     # Remove this input once LM Studio ships a ROCm 7.x engine.
-    nixpkgs-rocm6.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs-rocm6.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     git-hooks = {
       url = "github:cachix/git-hooks.nix";
