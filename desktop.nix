@@ -63,16 +63,19 @@ appimageTools.wrapType2 {
     ];
 
   extraInstallCommands = ''
-    # Desktop file
+    # Desktop file — fix Exec, Icon, and StartupWMClass to match our binary name
     install -Dm444 ${appimageContents}/lm-studio.desktop -t $out/share/applications
     substituteInPlace $out/share/applications/lm-studio.desktop \
-      --replace-fail 'Exec=AppRun --no-sandbox %U' 'Exec=lmstudio'
+      --replace-fail 'Exec=AppRun --no-sandbox %U' 'Exec=lmstudio' \
+      --replace-fail 'Icon=lm-studio' 'Icon=lmstudio' \
+      --replace-fail 'StartupWMClass=LM-Studio' 'StartupWMClass=lmstudio'
 
-    # Icons (resize from upstream 0x0 PNG)
+    # Icons (resize from upstream 0x0 PNG, install as both lmstudio and lm-studio)
     src_icon="${appimageContents}/usr/share/icons/hicolor/0x0/apps/lm-studio.png"
     for size in 16x16 32x32 48x48 64x64 128x128 256x256; do
       install -dm755 "$out/share/icons/hicolor/$size/apps"
-      gm convert "$src_icon" -resize "$size" "$out/share/icons/hicolor/$size/apps/lm-studio.png"
+      gm convert "$src_icon" -resize "$size" "$out/share/icons/hicolor/$size/apps/lmstudio.png"
+      ln -s lmstudio.png "$out/share/icons/hicolor/$size/apps/lm-studio.png"
     done
 
     # GPU driver injection + Wayland support + window class for icon
