@@ -47,6 +47,24 @@ in
     # Desktop app
     (lib.mkIf cfg.enable {
       home.packages = [ cfg.package ];
+
+      # Install icons to ~/.local/share/icons/ so KDE's kwin can find them
+      # for Wayland title bar icons (Electron doesn't implement xdg_toplevel_icon)
+      xdg.dataFile = builtins.listToAttrs (
+        map
+          (size: {
+            name = "icons/hicolor/${size}/apps/lm-studio.png";
+            value.source = "${cfg.package}/share/icons/hicolor/${size}/apps/lm-studio.png";
+          })
+          [
+            "16x16"
+            "32x32"
+            "48x48"
+            "64x64"
+            "128x128"
+            "256x256"
+          ]
+      );
     })
 
     # User daemon
