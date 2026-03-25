@@ -6,15 +6,17 @@
   makeBinaryWrapper,
   addDriverRunpath,
   libgcc,
+  vulkan-loader,
+  libxcrypt-legacy,
 }:
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "lmstudio-server";
-  version = "0.4.7";
+  version = "0.0.7-4";
 
   src = fetchurl {
-    url = "https://llmster.lmstudio.ai/download/${finalAttrs.version}-linux-x64.tar.gz";
-    hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+    url = "https://llmster.lmstudio.ai/download/${finalAttrs.version}-linux-x64.full.tar.gz";
+    hash = "sha256-Rwn/QGVKurFEqXWmDjJT+7Z1VUeBbU4WUCjKM7CnD2g=";
   };
 
   nativeBuildInputs = [
@@ -25,16 +27,20 @@ stdenv.mkDerivation (finalAttrs: {
   buildInputs = [
     stdenv.cc.cc.lib # libstdc++
     libgcc # libatomic, libgomp
+    vulkan-loader # libvulkan.so.1
+    libxcrypt-legacy # libcrypt.so.1
   ];
 
   # Bun-compiled binaries break when stripped
   dontStrip = true;
 
-  # autoPatchelfHook may warn about libcuda.so.1 — this is expected,
-  # it's provided by the GPU driver at runtime via addDriverRunpath
+  # CUDA libs are provided by the GPU driver at runtime via addDriverRunpath
   autoPatchelfIgnoreMissingDeps = [
     "libcuda.so.1"
     "libcuda.so"
+    "libcudart.so.11.0"
+    "libcublas.so.11"
+    "libcublasLt.so.11"
   ];
 
   sourceRoot = ".";
@@ -42,14 +48,18 @@ stdenv.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    # Find and install the lms binary
     mkdir -p $out/bin $out/lib/lmstudio-server
 
     # Copy the full bundle
-    cp -r . $out/lib/lmstudio-server/
+    cp -r .bundle $out/lib/lmstudio-server/
+    cp llmster $out/lib/lmstudio-server/
 
     # Create wrapper for lms CLI with GPU driver path
-    makeBinaryWrapper $out/lib/lmstudio-server/bin/lms $out/bin/lms \
+    makeBinaryWrapper $out/lib/lmstudio-server/.bundle/lms $out/bin/lms \
+      --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib"
+
+    # Create wrapper for llmster daemon with GPU driver path
+    makeBinaryWrapper $out/lib/lmstudio-server/llmster $out/bin/llmster \
       --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib"
 
     runHook postInstall
