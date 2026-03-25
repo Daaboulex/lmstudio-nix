@@ -35,6 +35,12 @@ appimageTools.wrapType2 {
     pkgs: with pkgs; [
       ocl-icd
       vulkan-loader
+      # ROCm runtime for AMD GPU acceleration (llama.cpp ROCm backend)
+      rocmPackages.clr
+      rocmPackages.rocm-runtime
+      rocmPackages.rocblas
+      rocmPackages.hipblas
+      rocmPackages.rocm-smi
     ];
 
   extraInstallCommands = ''
