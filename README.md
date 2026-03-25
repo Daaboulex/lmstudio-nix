@@ -162,7 +162,7 @@ nix fmt
 nix flake check
 ```
 
-## Legal & Licensing
+## License
 
 - **Nix packaging**: Licensed under the [MIT License](LICENSE).
 - **LM Studio software**: Proprietary. This repository does **not** distribute the LM Studio binary -- it only provides instructions to fetch and package it. Your use of LM Studio is subject to the [license terms](https://lmstudio.ai/terms) of LM Studio.
