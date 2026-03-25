@@ -50,7 +50,9 @@ appimageTools.wrapType2 {
   ];
 
   extraPkgs =
-    pkgs: with pkgs; [
+    pkgs:
+    with pkgs;
+    [
       ocl-icd
       vulkan-loader
       # ROCm 7.x runtime (for future engine updates)
