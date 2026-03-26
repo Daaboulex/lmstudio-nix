@@ -16,9 +16,11 @@ PACKAGE="lmstudio"
 output "package_name" "$PACKAGE"
 
 # --- Fetch latest desktop version ---
+# The redirect URL contains the version twice (path + filename). Use head -1
+# to avoid capturing a multiline string that breaks sed and $GITHUB_OUTPUT.
 log "Checking latest desktop version..."
 DESKTOP_URL="https://lmstudio.ai/download/latest/linux/x64"
-LATEST_DESKTOP_VERSION=$(curl -sfL -o /dev/null -w '%{url_effective}' "$DESKTOP_URL" 2>/dev/null | grep -oP '\d+\.\d+\.\d+(-\d+)?' || true)
+LATEST_DESKTOP_VERSION=$(curl -sfL -o /dev/null -w '%{url_effective}' "$DESKTOP_URL" 2>/dev/null | grep -oP '\d+\.\d+\.\d+(-\d+)?' | head -1 || true)
 
 if [ -z "$LATEST_DESKTOP_VERSION" ]; then
   # Fallback: try scraping the download page
@@ -40,7 +42,7 @@ log "Current stable version: $CURRENT_DESKTOP_VERSION"
 # --- Fetch latest beta version ---
 log "Checking latest beta version..."
 BETA_URL="https://lmstudio.ai/download/latest/linux/x64?channel=beta"
-LATEST_BETA_VERSION=$(curl -sfL -o /dev/null -w '%{url_effective}' "$BETA_URL" 2>/dev/null | grep -oP '\d+\.\d+\.\d+(-\d+|-beta\.\d+)?' || true)
+LATEST_BETA_VERSION=$(curl -sfL -o /dev/null -w '%{url_effective}' "$BETA_URL" 2>/dev/null | grep -oP '\d+\.\d+\.\d+(-\d+|-beta\.\d+)?' | head -1 || true)
 
 if [ -z "$LATEST_BETA_VERSION" ]; then
   LATEST_BETA_VERSION="$LATEST_DESKTOP_VERSION"
@@ -53,18 +55,63 @@ CURRENT_BETA_VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' beta.nix | head -1)
 log "Current beta version: $CURRENT_BETA_VERSION"
 
 # --- Fetch latest server version ---
+# The server (llmster) uses an independent version scheme (0.0.x-y) that cannot
+# be derived from the desktop version (0.4.x-y). The download endpoint returns
+# 405 for latest-redirect, so we try to probe known version patterns.
 log "Checking latest server version..."
-LATEST_SERVER_VERSION=$(curl -sfL -o /dev/null -w '%{url_effective}' "https://llmster.lmstudio.ai/download/latest/linux/x64" 2>/dev/null | grep -oP '\d+\.\d+\.\d+' || true)
+CURRENT_SERVER_VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' server.nix | head -1)
+log "Current server version: $CURRENT_SERVER_VERSION"
+
+# Try the latest-redirect first
+LATEST_SERVER_VERSION=$(curl -sfL -o /dev/null -w '%{url_effective}' "https://llmster.lmstudio.ai/download/latest/linux/x64" 2>/dev/null | grep -oP '\d+\.\d+\.\d+(-\d+)?' | head -1 || true)
 
 if [ -z "$LATEST_SERVER_VERSION" ]; then
-  LATEST_SERVER_VERSION="${LATEST_DESKTOP_VERSION%%-*}"
-  warn "Could not detect server version independently, using desktop base: $LATEST_SERVER_VERSION"
+  # Server endpoint doesn't support latest-redirect (returns 405).
+  # Probe incrementally from the current version to detect new releases.
+  # Parse current: major.minor.patch-build
+  IFS='.-' read -r S_MAJ S_MIN S_PATCH S_BUILD <<< "$CURRENT_SERVER_VERSION"
+  S_BUILD="${S_BUILD:-0}"
+
+  LATEST_SERVER_VERSION=""
+
+  # Probe next builds of current version (up to +5)
+  for try_build in $(seq $((S_BUILD + 1)) $((S_BUILD + 5))); do
+    PROBE="${S_MAJ}.${S_MIN}.${S_PATCH}-${try_build}"
+    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://llmster.lmstudio.ai/download/${PROBE}-linux-x64.full.tar.gz" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+      LATEST_SERVER_VERSION="$PROBE"
+    else
+      break
+    fi
+  done
+
+  # Probe next patch
+  if [ -z "$LATEST_SERVER_VERSION" ]; then
+    PROBE="${S_MAJ}.${S_MIN}.$((S_PATCH + 1))-1"
+    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://llmster.lmstudio.ai/download/${PROBE}-linux-x64.full.tar.gz" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+      LATEST_SERVER_VERSION="$PROBE"
+    fi
+  fi
+
+  # Probe next minor
+  if [ -z "$LATEST_SERVER_VERSION" ]; then
+    PROBE="${S_MAJ}.$((S_MIN + 1)).0-1"
+    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://llmster.lmstudio.ai/download/${PROBE}-linux-x64.full.tar.gz" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+      LATEST_SERVER_VERSION="$PROBE"
+    fi
+  fi
+
+  if [ -z "$LATEST_SERVER_VERSION" ]; then
+    LATEST_SERVER_VERSION="$CURRENT_SERVER_VERSION"
+    log "No newer server version found, staying at: $LATEST_SERVER_VERSION"
+  else
+    log "Found newer server version via probing: $LATEST_SERVER_VERSION"
+  fi
 fi
 
 log "Latest server version: $LATEST_SERVER_VERSION"
-
-CURRENT_SERVER_VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' server.nix | head -1)
-log "Current server version: $CURRENT_SERVER_VERSION"
 
 # --- Compare versions ---
 DESKTOP_CHANGED=false
@@ -102,7 +149,7 @@ DUMMY_HASH="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 # --- Update stable ---
 if [ "$DESKTOP_CHANGED" = true ]; then
   log "Updating stable.nix version..."
-  sed -i "s|version = \"$CURRENT_DESKTOP_VERSION\"|version = \"$LATEST_DESKTOP_VERSION\"|" stable.nix
+  sed -i "s|version = \"${CURRENT_DESKTOP_VERSION}\"|version = \"${LATEST_DESKTOP_VERSION}\"|" stable.nix
 
   log "Extracting stable hash..."
   CURRENT_HASH=$(grep -oP 'hash\s*=\s*"sha256-\K[^"]*' stable.nix | head -1)
@@ -123,7 +170,7 @@ fi
 # --- Update beta ---
 if [ "$BETA_CHANGED" = true ]; then
   log "Updating beta.nix version..."
-  sed -i "s|version = \"$CURRENT_BETA_VERSION\"|version = \"$LATEST_BETA_VERSION\"|" beta.nix
+  sed -i "s|version = \"${CURRENT_BETA_VERSION}\"|version = \"${LATEST_BETA_VERSION}\"|" beta.nix
 
   log "Extracting beta hash..."
   CURRENT_HASH=$(grep -oP 'hash\s*=\s*"sha256-\K[^"]*' beta.nix | head -1)
@@ -144,7 +191,7 @@ fi
 # --- Update server ---
 if [ "$SERVER_CHANGED" = true ]; then
   log "Updating server.nix version..."
-  sed -i "s|version = \"$CURRENT_SERVER_VERSION\"|version = \"$LATEST_SERVER_VERSION\"|" server.nix
+  sed -i "s|version = \"${CURRENT_SERVER_VERSION}\"|version = \"${LATEST_SERVER_VERSION}\"|" server.nix
 
   log "Extracting server hash..."
   CURRENT_HASH=$(grep -oP 'hash\s*=\s*"sha256-\K[^"]*' server.nix | head -1)
