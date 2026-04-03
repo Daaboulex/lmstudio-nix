@@ -3,7 +3,7 @@
 # Beta URL uses: https://lmstudio.ai/download/latest/linux/x64?channel=beta
 { callPackage, rocm6 }:
 callPackage ./desktop.nix {
-  version = "0.4.8-1";
-  hash = "sha256-gbLq6nY3Jdo2nZYWbh0XEVojrqkO5noZLV/lw4TaEs8=";
+  version = "0.4.9-1";
+  hash = "sha256-+vn8gExfdfbYUBVzc59kCDlw7nEbFIyGR0fF9sFFodo=";
   inherit rocm6;
 }

@@ -12,11 +12,11 @@
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "lmstudio-server";
-  version = "0.0.8-1";
+  version = "0.0.9-1";
 
   src = fetchurl {
     url = "https://llmster.lmstudio.ai/download/${finalAttrs.version}-linux-x64.full.tar.gz";
-    hash = "sha256-pG1uEwu+qBNQcBZ8IKsZTJ4TQdcmml7r+sI6ce9aguo=";
+    hash = "sha256-3G2qWyYXfNDwoxo4fMMooNNGA2rCurBhw7SlhykU5Hk=";
   };
 
   nativeBuildInputs = [
