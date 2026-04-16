@@ -1,5 +1,7 @@
 # lmstudio-nix
 
+[![CI](https://github.com/Daaboulex/lmstudio-nix/actions/workflows/ci.yml/badge.svg)](https://github.com/Daaboulex/lmstudio-nix/actions/workflows/ci.yml)
+
 A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS — local LLM inference with both a desktop GUI and headless server/CLI.
 
 ## Features
