@@ -1,6 +1,11 @@
 # lmstudio-nix
 
 [![CI](https://github.com/Daaboulex/lmstudio-nix/actions/workflows/ci.yml/badge.svg)](https://github.com/Daaboulex/lmstudio-nix/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/Daaboulex/lmstudio-nix)](./LICENSE)
+[![NixOS](https://img.shields.io/badge/NixOS-unstable-78C0E8?logo=nixos&logoColor=white)](https://nixos.org)
+[![Last commit](https://img.shields.io/github/last-commit/Daaboulex/lmstudio-nix)](https://github.com/Daaboulex/lmstudio-nix/commits)
+[![Stars](https://img.shields.io/github/stars/Daaboulex/lmstudio-nix?style=flat)](https://github.com/Daaboulex/lmstudio-nix/stargazers)
+[![Issues](https://img.shields.io/github/issues/Daaboulex/lmstudio-nix)](https://github.com/Daaboulex/lmstudio-nix/issues)
 
 A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS — local LLM inference with both a desktop GUI and headless server/CLI.
 
