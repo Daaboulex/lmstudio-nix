@@ -9,6 +9,27 @@
 
 A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS — local LLM inference with both a desktop GUI and headless server/CLI.
 
+## Upstream
+
+This is a **Nix packaging wrapper** — not the original program. LM Studio is **proprietary, unfree** software:
+
+- **Project**: [LM Studio](https://lmstudio.ai/)
+- **Vendor**: LM Studio
+- **License**: Proprietary; AppImage / server binaries fetched from `lmstudio.ai` at install time. This repo does **not** redistribute LM Studio — it only generates the fetch + wrap pipeline.
+- **Requires**: `nixpkgs.config.allowUnfree = true`
+
+Your use of LM Studio is subject to the [license terms](https://lmstudio.ai/terms) of LM Studio.
+
+## What Is This?
+
+A Nix flake that wraps LM Studio's stable + beta + server binaries into NixOS-portable packages with full CI infrastructure:
+
+- **Daily upstream check** at 06:00 UTC tracking three channels (stable, beta, server) — auto-PR on hash change
+- **Pre-publish verification** — eval + desktop build + `.desktop` check + server build + ldd check, all green before push
+- **GPU runtime injection** — bundles ROCm + CUDA + Vulkan + OpenCL libs so LM Studio's bundled llama.cpp engines can detect any GPU
+- **Two integration paths** — system-level `services.lmstudio` (multi-user / server) or user-level `programs.lmstudio` HM module (desktop with optional autostart user daemon)
+- **Stable + Beta channels** — both shipped as `pkgs.lmstudio` and `pkgs.lmstudio-beta` via the overlay
+
 ## Features
 
 - **Desktop App** (`lmstudio`): AppImage-based GUI with Wayland support, GPU driver injection, and desktop integration (icons, `.desktop` file).
