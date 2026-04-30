@@ -22,3 +22,8 @@ AGENTS.md
 .session-handoff.md
 memory/
 self-improvements-pending-*.jsonl
+.codex/
+.planning/
+.session-handoff-*.md
+handoffs/
+deferred-work.jsonl
