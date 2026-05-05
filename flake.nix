@@ -91,15 +91,15 @@
         pre-commit-check = git-hooks.lib.${system}.run {
           src = self;
           hooks.nixfmt-rfc-style.enable = true;
-            hooks.typos.enable = true;
-            hooks.rumdl.enable = true;
-            hooks.check-readme-sections = {
-              enable = true;
-              name = "check-readme-sections";
-              entry = "bash scripts/check-readme-sections.sh";
-              files = "README\.md$";
-              language = "system";
-            };
+          hooks.typos.enable = true;
+          hooks.rumdl.enable = true;
+          hooks.check-readme-sections = {
+            enable = true;
+            name = "check-readme-sections";
+            entry = "bash scripts/check-readme-sections.sh";
+            files = "README\.md$";
+            language = "system";
+          };
         };
       });
 
