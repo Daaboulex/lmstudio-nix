@@ -1,24 +1,21 @@
 # lmstudio-nix
 
-[![CI](https://github.com/Daaboulex/lmstudio-nix/actions/workflows/ci.yml/badge.svg)](https://github.com/Daaboulex/lmstudio-nix/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/Daaboulex/lmstudio-nix)](./LICENSE)
-[![NixOS](https://img.shields.io/badge/NixOS-unstable-78C0E8?logo=nixos&logoColor=white)](https://nixos.org)
-[![Last commit](https://img.shields.io/github/last-commit/Daaboulex/lmstudio-nix)](https://github.com/Daaboulex/lmstudio-nix/commits)
-[![Stars](https://img.shields.io/github/stars/Daaboulex/lmstudio-nix?style=flat)](https://github.com/Daaboulex/lmstudio-nix/stargazers)
-[![Issues](https://img.shields.io/github/issues/Daaboulex/lmstudio-nix)](https://github.com/Daaboulex/lmstudio-nix/issues)
+<!-- BEGIN generated:badges -->
+[![NixOS unstable](https://img.shields.io/badge/NixOS-unstable-78C0E8?logo=nixos&logoColor=white)](https://nixos.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+<!-- END generated:badges -->
 
 A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS — local LLM inference with both a desktop GUI and headless server/CLI.
 
+<!-- BEGIN generated:upstream -->
 ## Upstream
 
-This is a **Nix packaging wrapper** — not the original program. LM Studio is **proprietary, unfree** software:
-
-- **Project**: [LM Studio](https://lmstudio.ai/)
-- **Vendor**: LM Studio
-- **License**: Proprietary; AppImage / server binaries fetched from `lmstudio.ai` at install time. This repo does **not** redistribute LM Studio — it only generates the fetch + wrap pipeline.
-- **Requires**: `nixpkgs.config.allowUnfree = true`
-
-Your use of LM Studio is subject to the [license terms](https://lmstudio.ai/terms) of LM Studio.
+| | |
+|---|---|
+| **Project** | [Upstream](https://lmstudio.ai) |
+| **License** | Proprietary |
+| **Tracked** | Custom update script |
+<!-- END generated:upstream -->
 
 ## What Is This?
 
@@ -39,6 +36,30 @@ A Nix flake that wraps LM Studio's stable + beta + server binaries into NixOS-po
 - **NixOS Module**: System-level `lmstudio` daemon with systemd service, firewall, and dedicated user.
 - **Home Manager Module**: User-level desktop app installation with channel selection (stable/beta) and optional user daemon with autostart.
 - **Automated Updates**: Daily tracking of both stable and beta upstream versions, hash extraction, build verification, and silent push to main.
+
+<!-- BEGIN generated:installation -->
+## Installation
+
+Add as a flake input:
+
+```nix
+{
+  inputs.lmstudio = {
+    url = "github:Daaboulex/lmstudio-nix";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+}
+```
+
+Then use the package:
+
+```nix
+{ pkgs, inputs, ... }:
+{
+  environment.systemPackages = [ inputs.lmstudio.packages.${pkgs.system}.default ];
+}
+```
+<!-- END generated:installation -->
 
 ## Usage
 
@@ -218,3 +239,9 @@ nix flake check                    # Run all checks
 - **Nix packaging**: Licensed under the [MIT License](LICENSE).
 - **LM Studio software**: Proprietary. This repository does **not** distribute the LM Studio binary -- it only provides instructions to fetch and package it. Your use of LM Studio is subject to the [license terms](https://lmstudio.ai/terms) of LM Studio.
 - **Unfree**: Requires `nixpkgs.config.allowUnfree = true` in your Nix configuration.
+
+<!-- BEGIN generated:footer -->
+---
+
+*Maintained as part of the [Daaboulex](https://github.com/Daaboulex) NixOS ecosystem.*
+<!-- END generated:footer -->
