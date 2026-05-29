@@ -1,0 +1,3 @@
+# typos allowlist — LM Studio / ROCm vocabulary, not misspellings.
+[default.extend-words]
+HSA = "HSA"

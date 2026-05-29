@@ -16,13 +16,14 @@ A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS — local LLM inferen
 | **Project** | [Upstream](https://lmstudio.ai) |
 | **License** | Proprietary |
 | **Tracked** | Custom update script |
+
 <!-- END generated:upstream -->
 
 ## What Is This?
 
 A Nix flake that wraps LM Studio's stable + beta + server binaries into NixOS-portable packages with full CI infrastructure:
 
-- **Daily upstream check** at 06:00 UTC tracking three channels (stable, beta, server) — auto-PR on hash change
+- **Daily upstream check** at 06:00 UTC tracking three channels (stable, beta, server) — commits to `main` on hash change
 - **Pre-publish verification** — eval + desktop build + `.desktop` check + server build + ldd check, all green before push
 - **GPU runtime injection** — bundles ROCm + CUDA + Vulkan + OpenCL libs so LM Studio's bundled llama.cpp engines can detect any GPU
 - **Two integration paths** — system-level `services.lmstudio` (multi-user / server) or user-level `programs.lmstudio` HM module (desktop with optional autostart user daemon)
@@ -60,6 +61,7 @@ Then use the package:
   environment.systemPackages = [ inputs.lmstudio.packages.${pkgs.system}.default ];
 }
 ```
+
 <!-- END generated:installation -->
 
 ## Usage
@@ -191,7 +193,7 @@ Three GitHub Actions workflows keep the package up to date and verified:
 
 ### Upstream Update (`update.yml`)
 
-Runs **daily at 08:00 UTC** (and on manual dispatch):
+Runs **daily at 06:00 UTC** (and on manual dispatch):
 
 1. Checks latest stable version via redirect from `lmstudio.ai`
 2. Checks latest beta version via `?channel=beta`
@@ -202,13 +204,9 @@ Runs **daily at 08:00 UTC** (and on manual dispatch):
 
 ### Build CI (`ci.yml`)
 
-Runs on **every PR and push to main**:
-
-- `nix flake check --no-build` (evaluation)
-- `nix fmt -- --check .` (formatting)
-- Builds both `lmstudio` and `lmstudio-server`
-- Verifies `.desktop` file exists in desktop package
-- Verifies `lms` binary exists and has no missing shared libraries
+Runs on every push and PR: an AI-artifact guard, then builds every output the
+flake declares (stable/beta desktop + server packages, plus the standard's
+lint/conformance/schema and both module-eval checks) via `nix-fast-build`.
 
 ### Maintenance (`maintenance.yml`)
 
