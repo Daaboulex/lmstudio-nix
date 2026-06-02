@@ -55,9 +55,20 @@ jobs:
         id: build
         run: |
           set +e
+          SYS=$(nix eval --impure --raw --expr 'builtins.currentSystem')
+          # Build every output the flake declares for this system — the SAME
+          # target ci.yml uses (.#checks aliases each package plus the std
+          # checks). Bare `nix build` assumes .#default, which module-only repos
+          # (a NixOS/HM module, no package) do not have — that mismatch filed
+          # spurious "broke build" maintenance issues on every run.
+          if ! nix eval ".#checks.$SYS" --apply 'x: builtins.attrNames x != [ ]' 2>/dev/null | grep -qx true; then
+            echo "Flake declares no checks for $SYS — lock bump verified by eval only."
+            echo "exit_code=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           build() {
-            nix build --no-link --print-build-logs 2>&1 | tee /tmp/lock-build.log
-            return "${PIPESTATUS[0]}" # nix build's real exit, NOT tee's (always 0).
+            nix run nixpkgs#nix-fast-build -- --skip-cached --no-nom --flake ".#checks.$SYS" 2>&1 | tee /tmp/lock-build.log
+            return "${PIPESTATUS[0]}" # nix-fast-build's real exit, NOT tee's (always 0).
           }
           build
           code=$?
