@@ -8,7 +8,6 @@
   stdenv,
   ocl-icd,
   vulkan-loader,
-  rocmPackages,
   # ROCm 6.4.3 from nixos-25.11 — LM Studio's ROCm engine needs 6.x ABI.
   # First version with RDNA 4 (gfx1201) support. Remove once LM Studio ships ROCm 7.x.
   rocm6,
@@ -27,10 +26,8 @@ let
 
   appimageContents = appimageTools.extractType2 { inherit pname version src; };
 
-  # ROCm 6.4.3 libraries from nixos-25.11 — injected via LD_LIBRARY_PATH only.
-  # NOT in extraPkgs to avoid pulling nixos-25.11 deps into FHS (keeps all other
-  # packages on latest nixpkgs-unstable). The nix store is bind-mounted into the
-  # FHS sandbox, so these store paths are accessible via LD_LIBRARY_PATH.
+  # ROCm 6.4.3 libraries from nixos-25.11 — LM Studio's ROCm engine is built against
+  # the 6.x ABI; nixpkgs-unstable has 7.x. First version with RDNA 4 (gfx1201).
   rocm6Libs = [
     rocm6.rocmPackages.clr
     rocm6.rocmPackages.rocm-runtime
@@ -49,36 +46,39 @@ appimageTools.wrapType2 {
     makeWrapper
   ];
 
-  # All FHS packages from nixpkgs-unstable (latest). ROCm 6.x libs are NOT in
-  # extraPkgs — they're injected via LD_LIBRARY_PATH only, avoiding older deps
-  # from nixos-25.11 polluting the FHS environment. The nix store is bind-mounted
-  # into the FHS sandbox so the store paths are accessible.
+  # LM Studio bundles its own ROCm runtime (extensions/backends/vendor/), a generic
+  # Linux build that dlopens these base libs from the system. The FHS must carry them
+  # or its libamdhip64/libhsa-runtime fail to load and the ROCm hardware survey errors
+  # out ("load lib failed"). rocm6Libs below stay on LD_LIBRARY_PATH as a fallback.
   extraPkgs =
     pkgs: with pkgs; [
       ocl-icd
       vulkan-loader
-      rocmPackages.rocm-smi # GPU monitoring (resource monitor)
+      numactl # libnuma.so.1
+      libdrm # libdrm.so.2, libdrm_amdgpu.so.1
+      elfutils # libelf.so.1
+      zlib # libz.so.1
+      zstd # libzstd.so.1
     ];
 
   extraInstallCommands = ''
-    # Desktop file — fix Exec, Icon, and StartupWMClass to match our binary name
-    install -Dm444 ${appimageContents}/lm-studio.desktop -t $out/share/applications
-    substituteInPlace $out/share/applications/lm-studio.desktop \
-      --replace-fail 'Exec=AppRun --no-sandbox %U' 'Exec=lmstudio' \
-      --replace-fail 'StartupWMClass=LM-Studio' 'StartupWMClass=lm-studio'
+    # Desktop-file basename must equal the Electron Wayland app_id (LM-Studio) so
+    # KWin/GNOME resolve the window icon; StartupWMClass=LM-Studio stays for X11.
+    install -Dm444 ${appimageContents}/lm-studio.desktop $out/share/applications/LM-Studio.desktop
+    substituteInPlace $out/share/applications/LM-Studio.desktop \
+      --replace-fail 'Exec=AppRun --no-sandbox %U' 'Exec=lmstudio'
 
-    # Icons (resize from upstream 0x0 PNG, install as both lmstudio and lm-studio)
+    # Icons: resize the upstream 0x0 PNG to standard sizes (Icon=lm-studio).
     src_icon="${appimageContents}/usr/share/icons/hicolor/0x0/apps/lm-studio.png"
     for size in 16x16 32x32 48x48 64x64 128x128 256x256; do
       install -dm755 "$out/share/icons/hicolor/$size/apps"
       gm convert "$src_icon" -resize "$size" "$out/share/icons/hicolor/$size/apps/lm-studio.png"
     done
 
-    # GPU driver injection + ROCm 6.x libs + Wayland support + window class for icon
+    # GPU driver + ROCm 6.x libs on LD_LIBRARY_PATH; Wayland hints only under Wayland.
     wrapProgram $out/bin/${pname} \
       --set HSA_ENABLE_SDMA 0 \
       --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib:${rocm6LibPath}" \
-      --add-flags "--name=lm-studio" \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
 
     # Extract and patch the bundled lms CLI (available inside the AppImage)

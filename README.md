@@ -137,6 +137,21 @@ Vulkan support is included via `vulkan-loader` and works out of the box. The **V
 
 LM Studio downloads and manages its own llama.cpp inference engines in `~/.lmstudio/`. These include CPU-only, Vulkan, CUDA, and ROCm variants. The "Update" and "Download" buttons in **Settings > Runtime** are the app managing its own backends — this is normal, not a packaging issue.
 
+### GPU Detection Notes
+
+The package provides the system libraries LM Studio's bundled ROCm runtime dlopens
+(`numactl`, `libdrm`, `elfutils`, `zlib`, `zstd`), so the **ROCm** engine loads and
+enumerates AMD GPUs — including integrated Radeon graphics — with their VRAM.
+
+- **The Vulkan engine hides the integrated GPU when a discrete GPU is present** (an
+  upstream ggml-vulkan behavior). Prefer the **ROCm** engine to use an AMD iGPU; or,
+  for Vulkan, force one device per launch with
+  `MESA_VK_DEVICE_SELECT=<vendor:device>! lmstudio` (the trailing `!` is required and
+  overrides any system-wide `MESA_VK_DEVICE_SELECT`).
+- **Live GPU-memory readout** depends on the active engine: the ROCm engine reports
+  AMD VRAM; the Vulkan engine reads it via NVML (NVIDIA-only) and shows "No live GPU
+  info available" for AMD. Use `amdgpu_top`/`rocm-smi` for live AMD VRAM on Vulkan.
+
 ## NixOS Module
 
 The NixOS module runs LM Studio as a system-level daemon (for multi-user or server deployments):
