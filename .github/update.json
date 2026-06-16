@@ -11,5 +11,20 @@
     "binary": null,
     "args": null,
     "check": "desktop"
-  }
+  },
+  "description": "LM Studio packaged for NixOS - desktop GUI and headless server/CLI for local LLM inference with GPU injection",
+  "topics": [
+    "nix",
+    "nixos",
+    "flake",
+    "nixos-module",
+    "home-manager",
+    "lmstudio",
+    "llm",
+    "local-llm",
+    "llama-cpp",
+    "inference",
+    "rocm",
+    "cuda"
+  ]
 }
