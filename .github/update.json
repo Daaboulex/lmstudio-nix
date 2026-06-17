@@ -26,5 +26,8 @@
     "inference",
     "rocm",
     "cuda"
-  ]
+  ],
+  "platforms": {
+    "aarch64-linux": "amd64-only upstream AppImage; no Linux arm64 build"
+  }
 }
