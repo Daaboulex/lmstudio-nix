@@ -34,3 +34,16 @@ __pycache__/
 .ruff_cache/
 .rumdl_cache/
 .mypy_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+build/
+dist/
+target/
+*.egg-info/
+.eggs/
+node_modules/
+.venv/
+venv/
