@@ -8,6 +8,7 @@ result-*
 
 # Nix / direnv
 .direnv/
+.devshell/
 
 # git-hooks.nix generated config (a /nix/store symlink — never commit)
 .pre-commit-config.yaml
