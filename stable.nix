@@ -1,6 +1,6 @@
 { callPackage, rocm6 }:
 callPackage ./desktop.nix {
-  version = "0.4.19-2";
-  hash = "sha256-kR84VRYbKOYi8Y494/KFrIwzbK6nwSiorIkaIJJDeHI=";
+  version = "0.4.20-1";
+  hash = "sha256-bhyeeXOuiS7vk01wZhLJIMBLJBZYYRCNWIMliAHGSu0=";
   inherit rocm6;
 }
