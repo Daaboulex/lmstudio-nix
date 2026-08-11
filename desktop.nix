@@ -24,7 +24,7 @@ let
     inherit hash;
   };
 
-  appimageContents = appimageTools.extractType2 { inherit pname version src; };
+  appimageContents = appimageTools.extract { inherit pname version src; };
 
   # ROCm 6.4.3 libraries from nixos-25.11 — LM Studio's ROCm engine is built against
   # the 6.x ABI; nixpkgs-unstable has 7.x. First version with RDNA 4 (gfx1201).
