@@ -255,7 +255,4 @@ nix flake check                    # Run all checks
 - **Unfree**: Requires `nixpkgs.config.allowUnfree = true` in your Nix configuration.
 
 <!-- BEGIN generated:footer -->
----
-
-*Maintained as part of the [Daaboulex](https://github.com/Daaboulex) NixOS ecosystem.*
 <!-- END generated:footer -->
