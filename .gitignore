@@ -47,3 +47,8 @@ target/
 node_modules/
 .venv/
 venv/
+/htmlcov/
+/coverage/
+/build/
+/dist/
+/target/
