@@ -69,7 +69,7 @@ if [ -z "$LATEST_SERVER_VERSION" ]; then
   # Server endpoint doesn't support latest-redirect (returns 405).
   # Probe incrementally from the current version to detect new releases.
   # Parse current: major.minor.patch-build
-  IFS='.-' read -r S_MAJ S_MIN S_PATCH S_BUILD <<< "$CURRENT_SERVER_VERSION"
+  IFS='.-' read -r S_MAJ S_MIN S_PATCH S_BUILD <<<"$CURRENT_SERVER_VERSION"
   S_BUILD="${S_BUILD:-0}"
 
   LATEST_SERVER_VERSION=""
