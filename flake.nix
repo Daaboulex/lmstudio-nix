@@ -43,7 +43,7 @@
         lmstudio-server = final.callPackage ./server.nix { };
       };
       flake.nixosModules.default = import ./nixos-module.nix;
-      flake.homeManagerModules.default = import ./hm-module.nix;
+      flake.homeModules.default = import ./hm-module.nix;
 
       perSystem =
         { system, self', ... }:
@@ -66,14 +66,17 @@
           apps.lmstudio = {
             type = "app";
             program = "${self'.packages.lmstudio}/bin/lmstudio";
+            meta.description = "LM Studio desktop application, stable channel";
           };
           apps.lmstudio-beta = {
             type = "app";
             program = "${self'.packages.lmstudio-beta}/bin/lmstudio";
+            meta.description = "LM Studio desktop application, beta channel";
           };
           apps.lmstudio-server = {
             type = "app";
             program = "${self'.packages.lmstudio-server}/bin/lms";
+            meta.description = "LM Studio headless server (lms) for serving local models";
           };
           apps.default = self'.apps.lmstudio;
 
