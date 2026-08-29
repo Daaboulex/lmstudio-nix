@@ -64,15 +64,52 @@ appimageTools.wrapType2 {
   extraInstallCommands = ''
     # Desktop-file basename must equal the Electron Wayland app_id (LM-Studio) so
     # KWin/GNOME resolve the window icon; StartupWMClass=LM-Studio stays for X11.
-    install -Dm444 ${appimageContents}/lm-studio.desktop $out/share/applications/LM-Studio.desktop
-    substituteInPlace $out/share/applications/LM-Studio.desktop \
-      --replace-fail 'Exec=AppRun --no-sandbox %U' 'Exec=lmstudio'
+    desktop=$out/share/applications/LM-Studio.desktop
 
-    # Icons: resize the upstream 0x0 PNG to standard sizes (Icon=lm-studio).
-    src_icon="${appimageContents}/usr/share/icons/hicolor/0x0/apps/lm-studio.png"
+    mapfile -t desktopFiles < <(find ${appimageContents} -type f -name '*.desktop')
+    if [ "''${#desktopFiles[@]}" -eq 0 ]; then
+      echo "lmstudio: the extracted AppImage holds no .desktop file" >&2
+      exit 1
+    fi
+    for f in "''${desktopFiles[@]}"; do
+      if ! cmp -s "''${desktopFiles[0]}" "$f"; then
+        echo "lmstudio: the extracted AppImage holds differing .desktop files, cannot choose:" >&2
+        printf '  %s\n' "''${desktopFiles[@]}" >&2
+        exit 1
+      fi
+    done
+    install -Dm444 "''${desktopFiles[0]}" "$desktop"
+
+    sed -i 's|^Exec=.*|Exec=lmstudio|' "$desktop"
+    if ! grep -qx 'Exec=lmstudio' "$desktop"; then
+      echo "lmstudio: $desktop carries no Exec line to point at the wrapper" >&2
+      exit 1
+    fi
+
+    iconName=$(sed -n 's/^Icon=//p' "$desktop")
+    if [ "$(printf '%s' "$iconName" | wc -l)" -ne 0 ] || [ -z "$iconName" ]; then
+      echo "lmstudio: expected exactly one Icon= line in $desktop, got: ''${iconName:-none}" >&2
+      exit 1
+    fi
+
+    mapfile -t iconFiles < <(find ${appimageContents} -type f -name "$iconName.png")
+    if [ "''${#iconFiles[@]}" -eq 0 ]; then
+      echo "lmstudio: $desktop declares Icon=$iconName but the extracted AppImage has no $iconName.png" >&2
+      exit 1
+    fi
+    srcIcon=""
+    srcIconBytes=0
+    for f in "''${iconFiles[@]}"; do
+      bytes=$(stat -c %s "$f")
+      if [ "$bytes" -gt "$srcIconBytes" ]; then
+        srcIconBytes=$bytes
+        srcIcon=$f
+      fi
+    done
+
     for size in 16x16 32x32 48x48 64x64 128x128 256x256; do
       install -dm755 "$out/share/icons/hicolor/$size/apps"
-      gm convert "$src_icon" -resize "$size" "$out/share/icons/hicolor/$size/apps/lm-studio.png"
+      gm convert "$srcIcon" -resize "$size" "$out/share/icons/hicolor/$size/apps/$iconName.png"
     done
 
     # GPU driver + ROCm 6.x libs on LD_LIBRARY_PATH; Wayland hints only under Wayland.
