@@ -231,7 +231,8 @@ fi
 # 3. Desktop file verification
 log "Step 3/4: Desktop file verification"
 nix build .#lmstudio
-find result/share/applications/ -name "*.desktop" 2>/dev/null | head -1 | grep -q . || {
+DESKTOP_FILE=$(find result/share/applications/ -name "*.desktop" 2>/dev/null | head -1 || true)
+grep -q . <<<"$DESKTOP_FILE" || {
   warn "No desktop file found"
 }
 rm -f result
@@ -246,7 +247,8 @@ fi
 
 # ldd check (ignore libcuda — runtime only)
 FOUND=$(find result/bin/ \( -type f -o -type l \) -name "lms" 2>/dev/null | head -1)
-if [ -n "$FOUND" ] && file "$FOUND" 2>/dev/null | grep -q ELF; then
+FILE_TYPE=$(file "$FOUND" 2>/dev/null || true)
+if [ -n "$FOUND" ] && grep -q ELF <<<"$FILE_TYPE"; then
   MISSING=$(ldd "$FOUND" 2>&1 | grep "not found" | grep -v libcuda || true)
   if [ -n "$MISSING" ]; then
     err "Missing shared libraries:"
