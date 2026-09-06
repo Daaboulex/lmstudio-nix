@@ -2,6 +2,7 @@
   lib,
   stdenv,
   appimageTools,
+  buildFHSEnv,
   fetchurl,
   makeWrapper,
   graphicsmagick,
@@ -50,6 +51,26 @@ let
       ":"
       (lib.makeLibraryPath ([ addDriverRunpath.driverLink ] ++ rocm6Libs))
     ];
+
+  # The bundled ROCm runtime dlopens libnuma, libdrm, libelf, libz and libzstd from the system.
+  runtimePkgs = pkgs: [
+    pkgs.ocl-icd
+    pkgs.vulkan-loader
+    pkgs.numactl
+    pkgs.libdrm
+    pkgs.elfutils
+    pkgs.zlib
+    pkgs.zstd
+  ];
+
+  lmsPristine = "${appimageContents}/resources/app/.webpack/lms";
+
+  # lms locates its bundled program by reading its own file, so it runs byte-pristine inside an FHS environment instead of being patched.
+  lms = buildFHSEnv {
+    name = "lms";
+    targetPkgs = runtimePkgs;
+    runScript = lmsPristine;
+  };
 in
 appimageTools.wrapType2 {
   inherit pname version src;
@@ -59,16 +80,7 @@ appimageTools.wrapType2 {
     makeWrapper
   ];
 
-  # The bundled ROCm runtime dlopens libnuma, libdrm, libelf, libz and libzstd from the system.
-  extraPkgs = pkgs: [
-    pkgs.ocl-icd
-    pkgs.vulkan-loader
-    pkgs.numactl
-    pkgs.libdrm
-    pkgs.elfutils
-    pkgs.zlib
-    pkgs.zstd
-  ];
+  extraPkgs = runtimePkgs;
 
   extraInstallCommands = ''
     # The desktop file's basename must equal the Electron Wayland app_id for KWin and GNOME to find the window icon.
@@ -123,15 +135,12 @@ appimageTools.wrapType2 {
     wrapProgram $out/bin/${pname} ${lib.escapeShellArgs wrapperArgs} \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
 
-    lms=${appimageContents}/resources/app/.webpack/lms
-    if [ ! -f "$lms" ]; then
+    if [ ! -f ${lmsPristine} ]; then
       echo "lmstudio: the extracted AppImage holds no lms CLI at resources/app/.webpack/lms" >&2
       exit 1
     fi
-    install -Dm755 "$lms" $out/bin/lms
-    patchelf --set-interpreter "${stdenv.cc.bintools.dynamicLinker}" \
-      --set-rpath "${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}" \
-      $out/bin/lms
+    ln -s ${lms}/bin/lms $out/bin/lms
+    wrapProgram $out/bin/lms ${lib.escapeShellArgs wrapperArgs}
   '';
 
   meta = {
