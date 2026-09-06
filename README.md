@@ -27,7 +27,7 @@ A Nix flake that wraps LM Studio's stable and beta desktop builds, LM Studio Bio
 - **Daily upstream check** at 06:00 UTC over four channels (stable, beta, bionic, server) and both architectures; a pin that moved is committed to `main`.
 - **Pre-publish verification**: every system evaluates, every package builds for the runner's architecture, the desktop files are present, and the built `lms` and `llmster` run offline and report the pinned version, all green before the push.
 - **Vendor binaries run as shipped**: the AppImage contents and the server bundle stay byte-identical to upstream's and run inside an FHS environment carrying Vulkan, OpenCL and the libraries LM Studio's bundled ROCm runtime dlopens, with the host's GPU driver on the library path; ROCm 6 libraries are added on x86-64, the one architecture upstream ships a ROCm engine for.
-- **Two integration paths**: the system-level `services.lmstudio` daemon (multi-user or server) or the user-level `programs.lmstudio` Home Manager module (desktop apps and an optional user daemon).
+- **Two integration paths**: the system-level `services.lmstudio` daemon (multi-user or server) or the user-level `programs.lmstudio` Home Manager module (desktop apps, the LM Studio home directory, and an optional user daemon).
 - **Stable, beta and Bionic**: `pkgs.lmstudio`, `pkgs.lmstudio-beta` and `pkgs.lmstudio-bionic` through the overlay.
 
 ## Features
@@ -38,7 +38,7 @@ A Nix flake that wraps LM Studio's stable and beta desktop builds, LM Studio Bio
 - **Server/CLI** (`lmstudio-server`): headless `llmster` daemon and `lms` CLI for model management and OpenAI-compatible API serving.
 - **GPU Acceleration**: CUDA (NVIDIA) and Vulkan on both architectures, ROCm (AMD) on x86-64; the GPU driver is injected automatically.
 - **NixOS Module**: system-level `lmstudio` daemon with systemd service, firewall, and dedicated user.
-- **Home Manager Module**: user-level installation of LM Studio and Bionic with channel selection (stable/beta) and an optional user daemon with autostart.
+- **Home Manager Module**: user-level installation of LM Studio and Bionic with channel selection (stable/beta), the LM Studio home directory, and an optional user daemon with autostart.
 - **Automated Updates**: daily tracking of every channel on both architectures, hash extraction, build verification, and a silent push to main.
 
 ## Architectures
@@ -126,6 +126,12 @@ NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-server' -
    ];
    ```
 
+## Where LM Studio keeps its state
+
+LM Studio, Bionic, `lms` and `llmster` share one home directory for models, engines and settings. Upstream decides it in `findLMStudioHome` (lmstudio-js, `packages/lms-common-server/src/findLMStudioHome.ts`): the content of `~/.lmstudio-home-pointer` when that file exists, else a legacy `~/.cache/lm-studio` when that directory exists, else `~/.lmstudio`; in the last two cases the app writes the pointer itself. No environment variable and no XDG variable is read.
+
+The Home Manager module therefore seeds the pointer with `programs.lmstudio.home` (default: `$XDG_DATA_HOME/lmstudio`) at activation, only when neither the pointer nor a legacy home exists, and never touches it again; the NixOS daemon runs with `dataDir` as its `HOME`, so its state lives under `/var/lib/lmstudio`.
+
 ## GPU Setup
 
 LM Studio manages its own inference backends (llama.cpp engines) internally in its home directory. The package provides the GPU runtime libraries so these backends can detect and use your GPU.
@@ -190,7 +196,7 @@ services.lmstudio = {
   enable = true;
   port = 1234;          # API port (default: 1234)
   openFirewall = false;  # Open firewall for API port
-  dataDir = "/var/lib/lmstudio";  # Model storage directory
+  dataDir = "/var/lib/lmstudio";  # The daemon's home; models and engines live under it
 };
 ```
 
@@ -204,10 +210,11 @@ The Home Manager module provides user-level integration:
 # Desktop app only (stable channel)
 programs.lmstudio.enable = true;
 
-# Desktop app (beta channel), Bionic, and the user daemon
+# Desktop app (beta channel), Bionic, an explicit home, and the user daemon
 programs.lmstudio = {
   enable = true;
   package = pkgs.lmstudio-beta;  # Use beta channel
+  home = "/data/lmstudio";       # Default: $XDG_DATA_HOME/lmstudio
   bionic.enable = true;
   server = {
     enable = true;

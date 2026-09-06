@@ -34,7 +34,7 @@ in
     dataDir = lib.mkOption {
       type = lib.types.path;
       default = "/var/lib/lmstudio";
-      description = "Directory for LM Studio data and models.";
+      description = "The daemon's home directory; LM Studio keeps its models, engines and settings under it.";
     };
   };
 
@@ -53,10 +53,7 @@ in
       after = [ "network.target" ];
       wantedBy = [ "multi-user.target" ];
 
-      environment = {
-        HOME = cfg.dataDir;
-        LMSTUDIO_HOME = cfg.dataDir;
-      };
+      environment.HOME = cfg.dataDir;
 
       serviceConfig = {
         Type = "simple";

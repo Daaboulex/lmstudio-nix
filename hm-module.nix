@@ -38,6 +38,18 @@ in
       description = "The LM Studio desktop package to use.";
     };
 
+    home = lib.mkOption {
+      type = lib.types.path;
+      default = "${config.xdg.dataHome}/lmstudio";
+      defaultText = lib.literalExpression ''"''${config.xdg.dataHome}/lmstudio"'';
+      description = ''
+        Where LM Studio, Bionic, lms and llmster keep models, engines and settings.
+        Written to the pointer file they all read at start, ~/.lmstudio-home-pointer,
+        when neither that pointer nor a legacy home (~/.lmstudio or ~/.cache/lm-studio)
+        exists yet; from then on the apps own the pointer.
+      '';
+    };
+
     bionic = {
       enable = lib.mkEnableOption "LM Studio Bionic, the agent desktop app";
 
@@ -82,6 +94,19 @@ in
     (lib.mkIf cfg.bionic.enable {
       home.packages = [ cfg.bionic.package ];
       xdg.dataFile = iconFiles cfg.bionic.package "bionic";
+    })
+
+    (lib.mkIf (cfg.enable || cfg.bionic.enable || cfg.server.enable) {
+      home.activation.lmstudioHomePointer = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        pointer="$HOME/.lmstudio-home-pointer"
+        if [ ! -e "$pointer" ] && [ ! -e "$HOME/.lmstudio" ] && [ ! -e "$HOME/.cache/lm-studio" ]; then
+          if [[ -v DRY_RUN ]]; then
+            echo "would seed $pointer with ${cfg.home}"
+          else
+            printf '%s' "${cfg.home}" >"$pointer"
+          fi
+        fi
+      '';
     })
 
     (lib.mkIf cfg.server.enable {
