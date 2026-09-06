@@ -179,18 +179,27 @@ if [ "${#desktop_files[@]}" -ne 1 ]; then
   fail "expected one desktop file under ${desktop_out}/share/applications, found ${#desktop_files[@]}" desktop-file
 fi
 server_out="$(nix build .#lmstudio-server --no-link --print-out-paths)"
-for binary in lms llmster; do
-  if ! reported="$("${server_out}/bin/${binary}" version 2>&1)"; then
-    err "${server_out}/bin/${binary} version failed:"
-    echo "$reported"
-    fail "the built ${binary} does not run" smoke-test
-  fi
-  if ! grep -q -- "$(jq -r --arg s "$system_here" '.server[$s].version' "$sources" | tr '-' '+')" <<<"$reported"; then
-    err "${binary} version reported:"
-    echo "$reported"
-    fail "the built ${binary} does not report the pinned server version" smoke-test
-  fi
-done
+if ! lms_report="$("${server_out}/bin/lms" version 2>&1)"; then
+  err "${server_out}/bin/lms version failed:"
+  echo "$lms_report"
+  fail "the built lms does not run" smoke-test
+fi
+if ! grep -qF -- "CLI commit:" <<<"$lms_report"; then
+  err "lms version reported:"
+  echo "$lms_report"
+  fail "the built lms printed no CLI commit line" smoke-test
+fi
+if ! llmster_report="$("${server_out}/bin/llmster" version 2>&1)"; then
+  err "${server_out}/bin/llmster version failed:"
+  echo "$llmster_report"
+  fail "the built llmster does not run" smoke-test
+fi
+server_version_here="$(jq -r --arg s "$system_here" '.server[$s].version' "$sources" | tr '-' '+')"
+if ! grep -qF -- "$server_version_here" <<<"$llmster_report"; then
+  err "llmster version reported:"
+  echo "$llmster_report"
+  fail "the built llmster does not report the pinned server version ${server_version_here}" smoke-test
+fi
 
 log "Update verified for ${system_here}: $(printf '%s; ' "${changed[@]}")"
 exit 0
