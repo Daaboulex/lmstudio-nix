@@ -7,6 +7,25 @@
 
 let
   cfg = config.programs.lmstudio;
+
+  # Electron implements no xdg_toplevel_icon, so KWin resolves a Wayland window's icon from the user's icon theme directories.
+  iconFiles =
+    package: iconName:
+    builtins.listToAttrs (
+      map
+        (size: {
+          name = "icons/hicolor/${size}/apps/${iconName}.png";
+          value.source = "${package}/share/icons/hicolor/${size}/apps/${iconName}.png";
+        })
+        [
+          "16x16"
+          "32x32"
+          "48x48"
+          "64x64"
+          "128x128"
+          "256x256"
+        ]
+    );
 in
 {
   options.programs.lmstudio = {
@@ -17,6 +36,17 @@ in
       default = pkgs.lmstudio;
       defaultText = lib.literalExpression "pkgs.lmstudio";
       description = "The LM Studio desktop package to use.";
+    };
+
+    bionic = {
+      enable = lib.mkEnableOption "LM Studio Bionic, the agent desktop app";
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.lmstudio-bionic;
+        defaultText = lib.literalExpression "pkgs.lmstudio-bionic";
+        description = "The LM Studio Bionic package to use.";
+      };
     };
 
     server = {
@@ -44,30 +74,16 @@ in
   };
 
   config = lib.mkMerge [
-    # Desktop app
     (lib.mkIf cfg.enable {
       home.packages = [ cfg.package ];
-
-      # Install icons to ~/.local/share/icons/ so KDE's kwin can find them
-      # for Wayland title bar icons (Electron doesn't implement xdg_toplevel_icon)
-      xdg.dataFile = builtins.listToAttrs (
-        map
-          (size: {
-            name = "icons/hicolor/${size}/apps/lm-studio.png";
-            value.source = "${cfg.package}/share/icons/hicolor/${size}/apps/lm-studio.png";
-          })
-          [
-            "16x16"
-            "32x32"
-            "48x48"
-            "64x64"
-            "128x128"
-            "256x256"
-          ]
-      );
+      xdg.dataFile = iconFiles cfg.package "lm-studio";
     })
 
-    # User daemon
+    (lib.mkIf cfg.bionic.enable {
+      home.packages = [ cfg.bionic.package ];
+      xdg.dataFile = iconFiles cfg.bionic.package "bionic";
+    })
+
     (lib.mkIf cfg.server.enable {
       systemd.user.services.lmstudio = {
         Unit = {

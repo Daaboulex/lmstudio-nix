@@ -12,7 +12,27 @@
 }:
 
 let
-  pname = "lmstudio";
+  lmstudio = {
+    pname = "lmstudio";
+    description = "Desktop application for running local LLMs";
+    host = "installers.lmstudio.ai";
+    product = "LM-Studio";
+    lms = "resources/app/.webpack/lms";
+  };
+  app =
+    {
+      stable = lmstudio;
+      beta = lmstudio;
+      bionic = {
+        pname = "lmstudio-bionic";
+        description = "LM Studio Bionic, the agent desktop application for open models";
+        host = "bionic-installers.lmstudio.ai";
+        product = "Bionic";
+        lms = null;
+      };
+    }
+    .${channel};
+  inherit (app) pname;
   inherit (stdenv.hostPlatform) system;
   upstreamArch =
     {
@@ -24,7 +44,7 @@ let
   inherit (source) version;
 
   src = fetchurl {
-    url = "https://installers.lmstudio.ai/linux/${upstreamArch}/${version}/LM-Studio-${version}-${upstreamArch}.AppImage";
+    url = "https://${app.host}/linux/${upstreamArch}/${version}/${app.product}-${version}-${upstreamArch}.AppImage";
     inherit (source) hash;
   };
 
@@ -63,7 +83,7 @@ let
     pkgs.zstd
   ];
 
-  lmsPristine = "${appimageContents}/resources/app/.webpack/lms";
+  lmsPristine = "${appimageContents}/${app.lms}";
 
   # lms locates its bundled program by reading its own file, so it runs byte-pristine inside an FHS environment instead of being patched.
   lms = buildFHSEnv {
@@ -83,38 +103,43 @@ appimageTools.wrapType2 {
   extraPkgs = runtimePkgs;
 
   extraInstallCommands = ''
-    # The desktop file's basename must equal the Electron Wayland app_id for KWin and GNOME to find the window icon.
-    desktop=$out/share/applications/LM-Studio.desktop
-
     mapfile -t desktopFiles < <(find ${appimageContents} -type f -name '*.desktop')
     if [ "''${#desktopFiles[@]}" -eq 0 ]; then
-      echo "lmstudio: the extracted AppImage holds no .desktop file" >&2
+      echo "${pname}: the extracted AppImage holds no .desktop file" >&2
       exit 1
     fi
     for f in "''${desktopFiles[@]}"; do
       if ! cmp -s "''${desktopFiles[0]}" "$f"; then
-        echo "lmstudio: the extracted AppImage holds differing .desktop files, cannot choose:" >&2
+        echo "${pname}: the extracted AppImage holds differing .desktop files, cannot choose:" >&2
         printf '  %s\n' "''${desktopFiles[@]}" >&2
         exit 1
       fi
     done
+
+    # The desktop file's basename must equal the Electron Wayland app_id, the Name= field, for KWin and GNOME to find the window icon.
+    appName=$(sed -n 's/^Name=//p' "''${desktopFiles[0]}")
+    if [ "$(printf '%s' "$appName" | wc -l)" -ne 0 ] || ! [[ "$appName" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      echo "${pname}: expected exactly one Name= line naming a plain app_id in ''${desktopFiles[0]}, got: ''${appName:-none}" >&2
+      exit 1
+    fi
+    desktop=$out/share/applications/$appName.desktop
     install -Dm444 "''${desktopFiles[0]}" "$desktop"
 
-    sed -i 's|^Exec=.*|Exec=lmstudio|' "$desktop"
-    if ! grep -qx 'Exec=lmstudio' "$desktop"; then
-      echo "lmstudio: $desktop carries no Exec line to point at the wrapper" >&2
+    sed -i 's|^Exec=.*|Exec=${pname}|' "$desktop"
+    if ! grep -qx 'Exec=${pname}' "$desktop"; then
+      echo "${pname}: $desktop carries no Exec line to point at the wrapper" >&2
       exit 1
     fi
 
     iconName=$(sed -n 's/^Icon=//p' "$desktop")
     if [ "$(printf '%s' "$iconName" | wc -l)" -ne 0 ] || [ -z "$iconName" ]; then
-      echo "lmstudio: expected exactly one Icon= line in $desktop, got: ''${iconName:-none}" >&2
+      echo "${pname}: expected exactly one Icon= line in $desktop, got: ''${iconName:-none}" >&2
       exit 1
     fi
 
     mapfile -t iconFiles < <(find ${appimageContents} -type f -name "$iconName.png")
     if [ "''${#iconFiles[@]}" -eq 0 ]; then
-      echo "lmstudio: $desktop declares Icon=$iconName but the extracted AppImage has no $iconName.png" >&2
+      echo "${pname}: $desktop declares Icon=$iconName but the extracted AppImage has no $iconName.png" >&2
       exit 1
     fi
     srcIcon=""
@@ -134,9 +159,10 @@ appimageTools.wrapType2 {
 
     wrapProgram $out/bin/${pname} ${lib.escapeShellArgs wrapperArgs} \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
-
+  ''
+  + lib.optionalString (app.lms != null) ''
     if [ ! -f ${lmsPristine} ]; then
-      echo "lmstudio: the extracted AppImage holds no lms CLI at resources/app/.webpack/lms" >&2
+      echo "${pname}: the extracted AppImage holds no lms CLI at ${app.lms}" >&2
       exit 1
     fi
     ln -s ${lms}/bin/lms $out/bin/lms
@@ -144,7 +170,7 @@ appimageTools.wrapType2 {
   '';
 
   meta = {
-    description = "Desktop application for running local LLMs";
+    inherit (app) description;
     homepage = "https://lmstudio.ai/";
     license = lib.licenses.unfree;
     sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];
@@ -153,6 +179,6 @@ appimageTools.wrapType2 {
       "x86_64-linux"
       "aarch64-linux"
     ];
-    mainProgram = "lmstudio";
+    mainProgram = pname;
   };
 }

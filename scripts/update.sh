@@ -17,7 +17,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sources="$repo_root/sources.json"
 
 readonly SYSTEMS=(x86_64-linux aarch64-linux)
-readonly CHANNELS=(stable beta server)
+readonly CHANNELS=(stable beta bionic server)
 readonly VERSION_SHAPE='^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
 readonly INSTALLER_SCRIPT_URL="https://lmstudio.ai/install.sh"
 
@@ -33,8 +33,34 @@ package_of() {
   case "$1" in
   stable) echo lmstudio ;;
   beta) echo lmstudio-beta ;;
+  bionic) echo lmstudio-bionic ;;
   server) echo lmstudio-server ;;
   *) fail "no package for the $1 channel" config-error ;;
+  esac
+}
+
+appimage_host() {
+  case "$1" in
+  stable | beta) echo installers.lmstudio.ai ;;
+  bionic) echo bionic-installers.lmstudio.ai ;;
+  *) fail "no AppImage host for the $1 channel" config-error ;;
+  esac
+}
+
+appimage_product() {
+  case "$1" in
+  stable | beta) echo LM-Studio ;;
+  bionic) echo Bionic ;;
+  *) fail "no AppImage product name for the $1 channel" config-error ;;
+  esac
+}
+
+redirect_url() {
+  case "$1" in
+  stable) echo "https://lmstudio.ai/download/latest/linux/$2" ;;
+  beta) echo "https://lmstudio.ai/download/latest/linux/$2?channel=beta" ;;
+  bionic) echo "https://lmstudio.ai/download/bionic/latest/linux/$2" ;;
+  *) fail "no download redirect for the $1 channel" config-error ;;
   esac
 }
 
@@ -42,23 +68,22 @@ artifact_url() {
   local channel="$1" system="$2" version="$3" arch
   arch="$(upstream_arch "$system")"
   case "$channel" in
-  stable | beta) echo "https://installers.lmstudio.ai/linux/${arch}/${version}/LM-Studio-${version}-${arch}.AppImage" ;;
+  stable | beta | bionic) echo "https://$(appimage_host "$channel")/linux/${arch}/${version}/$(appimage_product "$channel")-${version}-${arch}.AppImage" ;;
   server) echo "https://llmster.lmstudio.ai/download/${version}-linux-${arch}.full.tar.gz" ;;
   *) fail "no artifact for the ${channel} channel" config-error ;;
   esac
 }
 
-desktop_latest() {
-  local channel="$1" system="$2" arch url final version
+appimage_latest() {
+  local channel="$1" system="$2" arch url final version host product
   arch="$(upstream_arch "$system")"
-  url="https://lmstudio.ai/download/latest/linux/${arch}"
-  if [ "$channel" = beta ]; then
-    url="${url}?channel=beta"
-  fi
+  url="$(redirect_url "$channel" "$arch")"
   if ! final="$(curl -sfIL -o /dev/null -w '%{url_effective}' "$url")"; then
     fail "could not resolve the ${channel} ${arch} download redirect at ${url}" network-error 2
   fi
-  local shape="^https://installers\.lmstudio\.ai/linux/${arch}/([^/]+)/LM-Studio-([^/]+)-${arch}\.AppImage$"
+  host="$(appimage_host "$channel")"
+  product="$(appimage_product "$channel")"
+  local shape="^https://${host//./\\.}/linux/${arch}/([^/]+)/${product}-([^/]+)-${arch}\.AppImage$"
   if ! [[ "$final" =~ $shape ]]; then
     fail "the ${channel} ${arch} redirect no longer lands on a versioned AppImage: ${final}" url-shape
   fi
@@ -117,7 +142,7 @@ for channel in "${CHANNELS[@]}"; do
     if [ "$channel" = server ]; then
       latest="$server_version"
     else
-      latest="$(desktop_latest "$channel" "$system")"
+      latest="$(appimage_latest "$channel" "$system")"
     fi
     if [ "$latest" = "$current" ]; then
       log "${channel}/${system}: ${current} is current"
@@ -166,18 +191,20 @@ if ! nix flake check --no-build --all-systems; then
 fi
 
 log "Step 2/3: build every package for ${system_here}"
-for package in lmstudio lmstudio-beta lmstudio-server; do
+for package in lmstudio lmstudio-beta lmstudio-bionic lmstudio-server; do
   if ! nix build ".#${package}" --no-link --print-build-logs; then
     fail "${package} failed to build on ${system_here}" build-error
   fi
 done
 
 log "Step 3/3: shape of the built outputs"
-desktop_out="$(nix build .#lmstudio --no-link --print-out-paths)"
-mapfile -t desktop_files < <(find "${desktop_out}/share/applications" -type f -name '*.desktop')
-if [ "${#desktop_files[@]}" -ne 1 ]; then
-  fail "expected one desktop file under ${desktop_out}/share/applications, found ${#desktop_files[@]}" desktop-file
-fi
+for package in lmstudio lmstudio-bionic; do
+  desktop_out="$(nix build ".#${package}" --no-link --print-out-paths)"
+  mapfile -t desktop_files < <(find "${desktop_out}/share/applications" -type f -name '*.desktop')
+  if [ "${#desktop_files[@]}" -ne 1 ]; then
+    fail "expected one desktop file under ${desktop_out}/share/applications, found ${#desktop_files[@]}" desktop-file
+  fi
+done
 server_out="$(nix build .#lmstudio-server --no-link --print-out-paths)"
 if ! lms_report="$("${server_out}/bin/lms" version 2>&1)"; then
   err "${server_out}/bin/lms version failed:"

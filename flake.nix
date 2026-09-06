@@ -1,5 +1,5 @@
 {
-  description = "LM Studio, the local LLM desktop app and headless server, for x86-64 and arm64 Linux";
+  description = "LM Studio, LM Studio Bionic and the headless llmster server for x86-64 and arm64 Linux";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -40,6 +40,7 @@
         {
           lmstudio = final.callPackage ./stable.nix { inherit rocm6; };
           lmstudio-beta = final.callPackage ./beta.nix { inherit rocm6; };
+          lmstudio-bionic = final.callPackage ./bionic.nix { inherit rocm6; };
           lmstudio-server = final.callPackage ./server.nix { };
         };
       flake.nixosModules.default = import ./nixos-module.nix;
@@ -57,8 +58,10 @@
         {
           packages.stable = pkgs.callPackage ./stable.nix { inherit rocm6; };
           packages.beta = pkgs.callPackage ./beta.nix { inherit rocm6; };
+          packages.bionic = pkgs.callPackage ./bionic.nix { inherit rocm6; };
           packages.lmstudio = self'.packages.stable;
           packages.lmstudio-beta = self'.packages.beta;
+          packages.lmstudio-bionic = self'.packages.bionic;
           packages.lmstudio-server = pkgs.callPackage ./server.nix { };
           packages.default = self'.packages.lmstudio;
 
@@ -71,6 +74,11 @@
             type = "app";
             program = "${self'.packages.lmstudio-beta}/bin/lmstudio";
             meta.description = "LM Studio desktop application, beta channel";
+          };
+          apps.lmstudio-bionic = {
+            type = "app";
+            program = "${self'.packages.lmstudio-bionic}/bin/lmstudio-bionic";
+            meta.description = "LM Studio Bionic, the agent desktop application";
           };
           apps.lmstudio-server = {
             type = "app";
@@ -94,7 +102,11 @@
             inherit system;
             overlays = [ self.overlays.default ];
             module = ./hm-module.nix;
-            config.programs.lmstudio.enable = true;
+            config.programs.lmstudio = {
+              enable = true;
+              bionic.enable = true;
+              server.enable = true;
+            };
           };
         };
     };

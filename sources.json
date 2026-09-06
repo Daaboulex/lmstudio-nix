@@ -19,6 +19,16 @@
       "hash": "sha256-MzPygFB0StS8KTuZWq0AR+ZtiQIJ353QHlgpddOa19Y="
     }
   },
+  "bionic": {
+    "x86_64-linux": {
+      "version": "1.1.1-5",
+      "hash": "sha256-UFjwwQR9iaypAVn/io/5cTMS0POKGkmw9PEWAmtglLw="
+    },
+    "aarch64-linux": {
+      "version": "1.1.1-5",
+      "hash": "sha256-frRX+LUEdb8qTs0PASdsygyb3WjefrKGKBMYczftxq0="
+    }
+  },
   "server": {
     "x86_64-linux": {
       "version": "0.0.23-1",

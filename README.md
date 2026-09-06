@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 <!-- END generated:badges -->
 
-A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS: the desktop app and the headless server with its `lms` CLI, for local LLM inference on x86-64 and arm64 Linux.
+A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS: the desktop app, [LM Studio Bionic](https://lmstudio.ai/bionic) (the agent desktop app), and the headless server with its `lms` CLI, for local LLM inference on x86-64 and arm64 Linux.
 
 <!-- BEGIN generated:upstream -->
 ## Upstream
@@ -21,23 +21,24 @@ A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS: the desktop app and 
 
 ## What Is This?
 
-A Nix flake that wraps LM Studio's stable and beta desktop builds and the headless server into NixOS packages, with the automation to keep them current:
+A Nix flake that wraps LM Studio's stable and beta desktop builds, LM Studio Bionic, and the headless server into NixOS packages, with the automation to keep them current:
 
 - **Two architectures**: every package builds on `x86_64-linux` and `aarch64-linux` from the AppImage or tarball upstream publishes for that architecture, and CI proves both on native runners.
-- **Daily upstream check** at 06:00 UTC over three channels (stable, beta, server) and both architectures; a pin that moved is committed to `main`.
-- **Pre-publish verification**: every system evaluates, every package builds for the runner's architecture, the desktop file is present, and the built `lms` and `llmster` run offline and report the pinned version, all green before the push.
-- **GPU runtime injection**: the desktop app runs in an FHS environment carrying Vulkan, OpenCL and the libraries LM Studio's bundled ROCm runtime dlopens, with the host's GPU driver on the library path; ROCm 6 libraries are added on x86-64, the one architecture upstream ships a ROCm engine for.
-- **Two integration paths**: the system-level `services.lmstudio` daemon (multi-user or server) or the user-level `programs.lmstudio` Home Manager module (desktop with an optional user daemon).
-- **Stable and beta channels**: `pkgs.lmstudio` and `pkgs.lmstudio-beta` through the overlay.
+- **Daily upstream check** at 06:00 UTC over four channels (stable, beta, bionic, server) and both architectures; a pin that moved is committed to `main`.
+- **Pre-publish verification**: every system evaluates, every package builds for the runner's architecture, the desktop files are present, and the built `lms` and `llmster` run offline and report the pinned version, all green before the push.
+- **Vendor binaries run as shipped**: the AppImage contents and the server bundle stay byte-identical to upstream's and run inside an FHS environment carrying Vulkan, OpenCL and the libraries LM Studio's bundled ROCm runtime dlopens, with the host's GPU driver on the library path; ROCm 6 libraries are added on x86-64, the one architecture upstream ships a ROCm engine for.
+- **Two integration paths**: the system-level `services.lmstudio` daemon (multi-user or server) or the user-level `programs.lmstudio` Home Manager module (desktop apps and an optional user daemon).
+- **Stable, beta and Bionic**: `pkgs.lmstudio`, `pkgs.lmstudio-beta` and `pkgs.lmstudio-bionic` through the overlay.
 
 ## Features
 
 - **Desktop App** (`lmstudio`): AppImage-based GUI with Wayland support, GPU driver injection, and desktop integration (icons, `.desktop` file).
 - **Beta Channel** (`lmstudio-beta`): tracks the LM Studio beta release channel.
+- **Bionic** (`lmstudio-bionic`): LM Studio Bionic, the agent desktop app on the same runtime, packaged the same way.
 - **Server/CLI** (`lmstudio-server`): headless `llmster` daemon and `lms` CLI for model management and OpenAI-compatible API serving.
 - **GPU Acceleration**: CUDA (NVIDIA) and Vulkan on both architectures, ROCm (AMD) on x86-64; the GPU driver is injected automatically.
 - **NixOS Module**: system-level `lmstudio` daemon with systemd service, firewall, and dedicated user.
-- **Home Manager Module**: user-level desktop app installation with channel selection (stable/beta) and an optional user daemon with autostart.
+- **Home Manager Module**: user-level installation of LM Studio and Bionic with channel selection (stable/beta) and an optional user daemon with autostart.
 - **Automated Updates**: daily tracking of every channel on both architectures, hash extraction, build verification, and a silent push to main.
 
 ## Architectures
@@ -47,12 +48,18 @@ Each channel is pinned per architecture in `sources.json`, because upstream publ
 | | `x86_64-linux` | `aarch64-linux` |
 |---|---|---|
 | Desktop artifact | `LM-Studio-<version>-x64.AppImage` | `LM-Studio-<version>-arm64.AppImage` |
+| Bionic artifact | `Bionic-<version>-x64.AppImage` | `Bionic-<version>-arm64.AppImage` |
 | Server artifact | `<version>-linux-x64.full.tar.gz` | `<version>-linux-arm64.full.tar.gz` |
 | Engines in the desktop bundle (0.4.23-1) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
+| Engines in the Bionic bundle (1.1.1-5) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
 | Engines in the server bundle (0.0.23-1) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
 | ROCm 6 libraries injected | yes | no (upstream ships no ROCm engine for arm64) |
 
 The x86-64 server bundle is upstream's generic `full` variant. Upstream's installer script picks a `full+cuda12` variant instead on hosts whose NVIDIA driver is 550.54.14 or newer; that variant is not packaged here.
+
+## Vendor binaries stay pristine
+
+`lms` is a standalone JavaScript runtime binary that locates its bundled program by reading its own executable file. Rewriting its ELF interpreter or rpath moves that payload and the binary fails at start ("Could not find standalone binary section", or a segfault). So nothing in the AppImage or the server tarball is patched: the server bundle is installed with fixup disabled and checked byte-identical to the tarball, and every entry point (`lmstudio`, `lmstudio-bionic`, `lms`, `llmster`) runs inside an FHS environment whose own loader starts the pristine binary. The environment carries the runtime libraries listed above, so the llama.cpp engines LM Studio downloads later find the FHS layout they were built for.
 
 <!-- BEGIN generated:installation -->
 ## Installation
@@ -90,6 +97,9 @@ NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix' --impure
 # Desktop GUI (beta)
 NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-beta' --impure
 
+# LM Studio Bionic
+NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-bionic' --impure
+
 # Server CLI
 NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-server' --impure
 ```
@@ -106,7 +116,7 @@ NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-server' -
 
    ```nix
    # Via overlay (recommended: makes pkgs.lmstudio, pkgs.lmstudio-beta,
-   # and pkgs.lmstudio-server available)
+   # pkgs.lmstudio-bionic and pkgs.lmstudio-server available)
    nixpkgs.overlays = [ inputs.lmstudio.overlays.default ];
    environment.systemPackages = [ pkgs.lmstudio ];
 
@@ -140,7 +150,7 @@ Upstream ships no ROCm engine for arm64, so the arm64 packages carry no ROCm lib
 
 ### NVIDIA GPUs (CUDA)
 
-CUDA's driver library is loaded at runtime from the NVIDIA driver. The server package ignores the missing `libcuda.so.1` during build since the driver provides it at runtime. After launching:
+CUDA's driver library is loaded at runtime from the NVIDIA driver through the driver path on the library path. After launching:
 
 1. Go to **Settings > Runtime**
 2. Download the **CUDA llama.cpp** engine
@@ -194,10 +204,11 @@ The Home Manager module provides user-level integration:
 # Desktop app only (stable channel)
 programs.lmstudio.enable = true;
 
-# Desktop app (beta channel) + user daemon
+# Desktop app (beta channel), Bionic, and the user daemon
 programs.lmstudio = {
   enable = true;
   package = pkgs.lmstudio-beta;  # Use beta channel
+  bionic.enable = true;
   server = {
     enable = true;
     port = 1234;
@@ -216,16 +227,16 @@ Three GitHub Actions workflows keep the package up to date and verified:
 
 Runs **daily at 06:00 UTC** (and on manual dispatch):
 
-1. Resolves the latest stable and beta desktop version per architecture from the `lmstudio.ai` download redirect, and the latest server version from the `APP_VERSION` upstream's own installer script pins
+1. Resolves the latest stable, beta and Bionic version per architecture from the `lmstudio.ai` download redirects, and the latest server version from the `APP_VERSION` upstream's own installer script pins
 2. Prefetches every artifact whose pin moved and, for the server, checks the download against the `.sha512` upstream publishes next to it
 3. Writes the new pins to `sources.json`
-4. Runs the verification chain: eval of every system, a build of every package for the runner's architecture, the desktop file, and an offline `lms version` and `llmster version` of the built server
+4. Runs the verification chain: eval of every system, a build of every package for the runner's architecture, the desktop files, and an offline `lms version` and `llmster version` of the built server
 5. On success: silent push to main. On failure: creates a GitHub Issue with the log and a recovery branch
 
 ### Build CI (`ci.yml`)
 
 Runs on every push and PR: an AI-artifact guard, then builds every output the
-flake declares (stable/beta desktop + server packages, plus the standard's
+flake declares (the desktop, Bionic and server packages, plus the standard's
 lint/conformance/schema and both module-eval checks) via `nix-fast-build`, once
 on an x86-64 runner and once on an arm64 runner.
 
@@ -247,6 +258,7 @@ Runs **weekly on Sunday at 04:00 UTC**:
 nix develop                        # Enter dev shell (installs git hooks)
 nix build                          # Build desktop (stable, default)
 nix build .#lmstudio-beta          # Build desktop (beta)
+nix build .#lmstudio-bionic        # Build LM Studio Bionic
 nix build .#lmstudio-server        # Build server
 nix run                            # Run desktop
 nix run .#lmstudio-server -- --help  # Run server CLI
