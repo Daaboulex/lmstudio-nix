@@ -20,7 +20,6 @@ let
   source = (lib.importJSON ./sources.json).server.${system};
   inherit (source) version;
 
-  # lms locates its bundled program by reading its own file, so the whole bundle stays byte-pristine and runs inside an FHS environment.
   bundle = stdenvNoCC.mkDerivation {
     pname = "lmstudio-server-bundle";
     inherit version;
@@ -53,20 +52,20 @@ let
     '';
   };
 
-  # The bundled ROCm runtime dlopens libnuma, libdrm, libelf, libz and libzstd from the system.
   env = buildFHSEnv {
     name = "lmstudio-server-env";
-    targetPkgs = pkgs: [
-      pkgs.libgcc
-      pkgs.libxcrypt-legacy
-      pkgs.ocl-icd
-      pkgs.vulkan-loader
-      pkgs.numactl
-      pkgs.libdrm
-      pkgs.elfutils
-      pkgs.zlib
-      pkgs.zstd
-    ];
+    targetPkgs =
+      pkgs:
+      lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [ pkgs.libxcrypt-legacy ]
+      ++ [
+        pkgs.ocl-icd
+        pkgs.vulkan-loader
+        pkgs.numactl
+        pkgs.libdrm
+        pkgs.elfutils
+        pkgs.zlib
+        pkgs.zstd
+      ];
     runScript = writeShellScript "lmstudio-server-run" ''exec "$@"'';
   };
 in

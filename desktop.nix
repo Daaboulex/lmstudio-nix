@@ -50,7 +50,6 @@ let
 
   appimageContents = appimageTools.extract { inherit pname version src; };
 
-  # LM Studio's ROCm engine exists for x64 only and is built against the ROCm 6 ABI.
   rocm6Libs = lib.optionals stdenv.hostPlatform.isx86_64 [
     rocm6.rocmPackages.clr
     rocm6.rocmPackages.rocm-runtime
@@ -72,7 +71,6 @@ let
       (lib.makeLibraryPath ([ addDriverRunpath.driverLink ] ++ rocm6Libs))
     ];
 
-  # The bundled ROCm runtime dlopens libnuma, libdrm, libelf, libz and libzstd from the system.
   runtimePkgs = pkgs: [
     pkgs.ocl-icd
     pkgs.vulkan-loader
@@ -85,7 +83,6 @@ let
 
   lmsPristine = "${appimageContents}/${app.lms}";
 
-  # lms locates its bundled program by reading its own file, so it runs byte-pristine inside an FHS environment instead of being patched.
   lms = buildFHSEnv {
     name = "lms";
     targetPkgs = runtimePkgs;

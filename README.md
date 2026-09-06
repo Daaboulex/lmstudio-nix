@@ -25,7 +25,7 @@ A Nix flake that wraps LM Studio's stable and beta desktop builds, LM Studio Bio
 
 - **Two architectures**: every package builds on `x86_64-linux` and `aarch64-linux` from the AppImage or tarball upstream publishes for that architecture, and CI proves both on native runners.
 - **Daily upstream check** at 06:00 UTC over four channels (stable, beta, bionic, server) and both architectures; a pin that moved is committed to `main`.
-- **Pre-publish verification**: every system evaluates, every package builds for the runner's architecture, the desktop files are present, and the built `lms` and `llmster` run offline and report the pinned version, all green before the push.
+- **Pre-publish verification**: every system evaluates, every package builds for the runner's architecture, the desktop files are present, and the built `lms` runs and the built `llmster` reports the pinned version offline, all green before the push.
 - **Vendor binaries run as shipped**: the AppImage contents and the server bundle stay byte-identical to upstream's and run inside an FHS environment carrying Vulkan, OpenCL and the libraries LM Studio's bundled ROCm runtime dlopens, with the host's GPU driver on the library path; ROCm 6 libraries are added on x86-64, the one architecture upstream ships a ROCm engine for.
 - **Two integration paths**: the system-level `services.lmstudio` daemon (multi-user or server) or the user-level `programs.lmstudio` Home Manager module (desktop apps, the LM Studio home directory, and an optional user daemon).
 - **Stable, beta and Bionic**: `pkgs.lmstudio`, `pkgs.lmstudio-beta` and `pkgs.lmstudio-bionic` through the overlay.
@@ -36,7 +36,7 @@ A Nix flake that wraps LM Studio's stable and beta desktop builds, LM Studio Bio
 - **Beta Channel** (`lmstudio-beta`): tracks the LM Studio beta release channel.
 - **Bionic** (`lmstudio-bionic`): LM Studio Bionic, the agent desktop app on the same runtime, packaged the same way.
 - **Server/CLI** (`lmstudio-server`): headless `llmster` daemon and `lms` CLI for model management and OpenAI-compatible API serving.
-- **GPU Acceleration**: CUDA (NVIDIA) and Vulkan on both architectures, ROCm (AMD) on x86-64; the GPU driver is injected automatically.
+- **GPU Acceleration**: CUDA (NVIDIA) on both architectures, Vulkan and ROCm (AMD) on x86-64; the GPU driver is injected automatically.
 - **NixOS Module**: system-level `lmstudio` daemon with systemd service, firewall, and dedicated user.
 - **Home Manager Module**: user-level installation of LM Studio and Bionic with channel selection (stable/beta), the LM Studio home directory, and an optional user daemon with autostart.
 - **Automated Updates**: daily tracking of every channel on both architectures, hash extraction, build verification, and a silent push to main.
