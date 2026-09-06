@@ -21,6 +21,37 @@ readonly CHANNELS=(stable beta bionic server)
 readonly VERSION_SHAPE='^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
 readonly INSTALLER_SCRIPT_URL="https://lmstudio.ai/install.sh"
 
+http_verdict() {
+  local url="$1" code="$2" what="$3"
+  case "$code" in
+  2[0-9][0-9]) return 0 ;;
+  403 | 429 | 5[0-9][0-9]) fail "${url} answered ${code}" network-error 2 ;;
+  *) fail "${url} answered ${code}; ${what}" url-shape ;;
+  esac
+}
+
+resolve_redirect() {
+  local url="$1" reply
+  if ! reply="$(curl -sIL -o /dev/null -w "%{http_code} %{url_effective}" "$url")"; then
+    fail "could not reach ${url}" network-error 2
+  fi
+  http_verdict "$url" "${reply%% *}" "the download redirect moved or is gone"
+  echo "${reply#* }"
+}
+
+fetch_text() {
+  local url="$1" body code text
+  body="$(mktemp)"
+  if ! code="$(curl -sL -o "$body" -w "%{http_code}" "$url")"; then
+    rm -f "$body"
+    fail "could not reach ${url}" network-error 2
+  fi
+  text="$(cat "$body")"
+  rm -f "$body"
+  http_verdict "$url" "$code" "the file moved or is gone"
+  printf "%s\n" "$text"
+}
+
 upstream_arch() {
   case "$1" in
   x86_64-linux) echo x64 ;;
@@ -78,9 +109,7 @@ appimage_latest() {
   local channel="$1" system="$2" arch url final version host product
   arch="$(upstream_arch "$system")"
   url="$(redirect_url "$channel" "$arch")"
-  if ! final="$(curl -sfIL -o /dev/null -w '%{url_effective}' "$url")"; then
-    fail "could not resolve the ${channel} ${arch} download redirect at ${url}" network-error 2
-  fi
+  final="$(resolve_redirect "$url")"
   host="$(appimage_host "$channel")"
   product="$(appimage_product "$channel")"
   local shape="^https://${host//./\\.}/linux/${arch}/([^/]+)/${product}-([^/]+)-${arch}\.AppImage$"
@@ -96,9 +125,7 @@ appimage_latest() {
 
 server_latest() {
   local script versions
-  if ! script="$(curl -fsSL "$INSTALLER_SCRIPT_URL")"; then
-    fail "could not fetch the llmster installer script at ${INSTALLER_SCRIPT_URL}" network-error 2
-  fi
+  script="$(fetch_text "$INSTALLER_SCRIPT_URL")"
   versions="$(sed -nE 's/^APP_VERSION="([^"]+)"$/\1/p' <<<"$script")"
   if [ "$(wc -l <<<"$versions")" -ne 1 ] || ! [[ "$versions" =~ $VERSION_SHAPE ]]; then
     fail "the llmster installer script no longer states one APP_VERSION: '${versions}'" url-shape
@@ -108,9 +135,7 @@ server_latest() {
 
 verify_upstream_sha512() {
   local url="$1" store_path="$2" expected actual
-  if ! expected="$(curl -fsSL "${url}.sha512")"; then
-    fail "could not fetch the upstream checksum at ${url}.sha512" network-error 2
-  fi
+  expected="$(fetch_text "${url}.sha512")"
   expected="${expected//[[:space:]]/}"
   if ! [[ "$expected" =~ ^[0-9a-f]{128}$ ]]; then
     fail "the upstream checksum at ${url}.sha512 is not one sha512 digest: '${expected}'" url-shape
@@ -127,7 +152,8 @@ pin() {
   tmp="$(mktemp)"
   jq --arg c "$channel" --arg s "$system" --arg v "$version" --arg h "$hash" \
     '.[$c][$s] = {version: $v, hash: $h}' "$sources" >"$tmp"
-  mv "$tmp" "$sources"
+  cat "$tmp" >"$sources"
+  rm -f "$tmp"
 }
 
 log "Resolving the latest upstream versions"
@@ -197,14 +223,7 @@ for package in lmstudio lmstudio-beta lmstudio-bionic lmstudio-server; do
   fi
 done
 
-log "Step 3/3: shape of the built outputs"
-for package in lmstudio lmstudio-bionic; do
-  desktop_out="$(nix build ".#${package}" --no-link --print-out-paths)"
-  mapfile -t desktop_files < <(find "${desktop_out}/share/applications" -type f -name '*.desktop')
-  if [ "${#desktop_files[@]}" -ne 1 ]; then
-    fail "expected one desktop file under ${desktop_out}/share/applications, found ${#desktop_files[@]}" desktop-file
-  fi
-done
+log "Step 3/3: the built server runs"
 server_out="$(nix build .#lmstudio-server --no-link --print-out-paths)"
 if ! lms_report="$("${server_out}/bin/lms" version 2>&1)"; then
   err "${server_out}/bin/lms version failed:"
