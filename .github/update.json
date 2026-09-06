@@ -3,10 +3,8 @@
   "upstream": {
     "type": "custom"
   },
-  "packageFile": "stable.nix",
-  "hashes": [
-    "hash"
-  ],
+  "packageFile": "desktop.nix",
+  "versionFile": "sources.json",
   "verify": {
     "binary": null,
     "args": null,
@@ -26,8 +24,5 @@
     "inference",
     "rocm",
     "cuda"
-  ],
-  "platforms": {
-    "aarch64-linux": "amd64-only upstream AppImage; no Linux arm64 build"
-  }
+  ]
 }

@@ -1,265 +1,196 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Custom update script for LM Studio (desktop + server)
-# Contract: exit 0 = success/no-update, exit 1 = failed, exit 2 = network error
-
 OUTPUT_FILE="${GITHUB_OUTPUT:-/tmp/update-outputs.env}"
 : >"$OUTPUT_FILE"
-
 output() { echo "$1=$2" >>"$OUTPUT_FILE"; }
 log() { echo "==> $*"; }
-warn() { echo "::warning::$*"; }
 err() { echo "::error::$*"; }
 
-PACKAGE="lmstudio"
-output "package_name" "$PACKAGE"
+fail() {
+  err "$1"
+  output "error_type" "$2"
+  exit "${3:-1}"
+}
 
-# --- Fetch latest desktop version ---
-# The redirect URL contains the version twice (path + filename). Use head -1
-# to avoid capturing a multiline string that breaks sed and $GITHUB_OUTPUT.
-log "Checking latest desktop version..."
-DESKTOP_URL="https://lmstudio.ai/download/latest/linux/x64"
-LATEST_DESKTOP_VERSION=$(curl -sfL -o /dev/null -w '%{url_effective}' "$DESKTOP_URL" 2>/dev/null | grep -oP '\d+\.\d+\.\d+(-\d+)?' | head -1 || true)
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+sources="$repo_root/sources.json"
 
-if [ -z "$LATEST_DESKTOP_VERSION" ]; then
-  # Fallback: try scraping the download page
-  LATEST_DESKTOP_VERSION=$(curl -sfL "https://lmstudio.ai/" 2>/dev/null | grep -oP 'LM-Studio-\K[\d.]+-?\d*(?=-x64\.AppImage)' | head -1 || true)
-fi
+readonly SYSTEMS=(x86_64-linux aarch64-linux)
+readonly CHANNELS=(stable beta server)
+readonly VERSION_SHAPE='^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
+readonly INSTALLER_SCRIPT_URL="https://lmstudio.ai/install.sh"
 
-if [ -z "$LATEST_DESKTOP_VERSION" ]; then
-  warn "Failed to detect latest desktop version"
-  output "updated" "false"
-  exit 2
-fi
+upstream_arch() {
+  case "$1" in
+  x86_64-linux) echo x64 ;;
+  aarch64-linux) echo arm64 ;;
+  *) fail "no upstream architecture for $1" config-error ;;
+  esac
+}
 
-log "Latest desktop version: $LATEST_DESKTOP_VERSION"
+package_of() {
+  case "$1" in
+  stable) echo lmstudio ;;
+  beta) echo lmstudio-beta ;;
+  server) echo lmstudio-server ;;
+  *) fail "no package for the $1 channel" config-error ;;
+  esac
+}
 
-# --- Get current stable version ---
-CURRENT_DESKTOP_VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' stable.nix | head -1)
-log "Current stable version: $CURRENT_DESKTOP_VERSION"
+artifact_url() {
+  local channel="$1" system="$2" version="$3" arch
+  arch="$(upstream_arch "$system")"
+  case "$channel" in
+  stable | beta) echo "https://installers.lmstudio.ai/linux/${arch}/${version}/LM-Studio-${version}-${arch}.AppImage" ;;
+  server) echo "https://llmster.lmstudio.ai/download/${version}-linux-${arch}.full.tar.gz" ;;
+  *) fail "no artifact for the ${channel} channel" config-error ;;
+  esac
+}
 
-# --- Fetch latest beta version ---
-log "Checking latest beta version..."
-BETA_URL="https://lmstudio.ai/download/latest/linux/x64?channel=beta"
-LATEST_BETA_VERSION=$(curl -sfL -o /dev/null -w '%{url_effective}' "$BETA_URL" 2>/dev/null | grep -oP '\d+\.\d+\.\d+(-\d+|-beta\.\d+)?' | head -1 || true)
+desktop_latest() {
+  local channel="$1" system="$2" arch url final version
+  arch="$(upstream_arch "$system")"
+  url="https://lmstudio.ai/download/latest/linux/${arch}"
+  if [ "$channel" = beta ]; then
+    url="${url}?channel=beta"
+  fi
+  if ! final="$(curl -sfIL -o /dev/null -w '%{url_effective}' "$url")"; then
+    fail "could not resolve the ${channel} ${arch} download redirect at ${url}" network-error 2
+  fi
+  local shape="^https://installers\.lmstudio\.ai/linux/${arch}/([^/]+)/LM-Studio-([^/]+)-${arch}\.AppImage$"
+  if ! [[ "$final" =~ $shape ]]; then
+    fail "the ${channel} ${arch} redirect no longer lands on a versioned AppImage: ${final}" url-shape
+  fi
+  version="${BASH_REMATCH[1]}"
+  if [ "$version" != "${BASH_REMATCH[2]}" ] || ! [[ "$version" =~ $VERSION_SHAPE ]]; then
+    fail "the ${channel} ${arch} redirect names an unexpected version: ${final}" url-shape
+  fi
+  echo "$version"
+}
 
-if [ -z "$LATEST_BETA_VERSION" ]; then
-  LATEST_BETA_VERSION="$LATEST_DESKTOP_VERSION"
-  log "No separate beta version found, using stable: $LATEST_BETA_VERSION"
-fi
+server_latest() {
+  local script versions
+  if ! script="$(curl -fsSL "$INSTALLER_SCRIPT_URL")"; then
+    fail "could not fetch the llmster installer script at ${INSTALLER_SCRIPT_URL}" network-error 2
+  fi
+  versions="$(sed -nE 's/^APP_VERSION="([^"]+)"$/\1/p' <<<"$script")"
+  if [ "$(wc -l <<<"$versions")" -ne 1 ] || ! [[ "$versions" =~ $VERSION_SHAPE ]]; then
+    fail "the llmster installer script no longer states one APP_VERSION: '${versions}'" url-shape
+  fi
+  echo "$versions"
+}
 
-log "Latest beta version: $LATEST_BETA_VERSION"
+verify_upstream_sha512() {
+  local url="$1" store_path="$2" expected actual
+  if ! expected="$(curl -fsSL "${url}.sha512")"; then
+    fail "could not fetch the upstream checksum at ${url}.sha512" network-error 2
+  fi
+  expected="${expected//[[:space:]]/}"
+  if ! [[ "$expected" =~ ^[0-9a-f]{128}$ ]]; then
+    fail "the upstream checksum at ${url}.sha512 is not one sha512 digest: '${expected}'" url-shape
+  fi
+  actual="$(sha512sum "$store_path")"
+  actual="${actual%% *}"
+  if [ "$actual" != "$expected" ]; then
+    fail "${url} does not match its upstream sha512 (${expected}); the download hashed to ${actual}" checksum-mismatch
+  fi
+}
 
-CURRENT_BETA_VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' beta.nix | head -1)
-log "Current beta version: $CURRENT_BETA_VERSION"
+pin() {
+  local channel="$1" system="$2" version="$3" hash="$4" tmp
+  tmp="$(mktemp)"
+  jq --arg c "$channel" --arg s "$system" --arg v "$version" --arg h "$hash" \
+    '.[$c][$s] = {version: $v, hash: $h}' "$sources" >"$tmp"
+  mv "$tmp" "$sources"
+}
 
-# --- Fetch latest server version ---
-# The server (llmster) uses an independent version scheme (0.0.x-y) that cannot
-# be derived from the desktop version (0.4.x-y). The download endpoint returns
-# 405 for latest-redirect, so we try to probe known version patterns.
-log "Checking latest server version..."
-CURRENT_SERVER_VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' server.nix | head -1)
-log "Current server version: $CURRENT_SERVER_VERSION"
-
-# Try the latest-redirect first
-LATEST_SERVER_VERSION=$(curl -sfL -o /dev/null -w '%{url_effective}' "https://llmster.lmstudio.ai/download/latest/linux/x64" 2>/dev/null | grep -oP '\d+\.\d+\.\d+(-\d+)?' | head -1 || true)
-
-if [ -z "$LATEST_SERVER_VERSION" ]; then
-  # Server endpoint doesn't support latest-redirect (returns 405).
-  # Probe incrementally from the current version to detect new releases.
-  # Parse current: major.minor.patch-build
-  IFS='.-' read -r S_MAJ S_MIN S_PATCH S_BUILD <<<"$CURRENT_SERVER_VERSION"
-  S_BUILD="${S_BUILD:-0}"
-
-  LATEST_SERVER_VERSION=""
-
-  # Probe next builds of current version (up to +5)
-  for try_build in $(seq $((S_BUILD + 1)) $((S_BUILD + 5))); do
-    PROBE="${S_MAJ}.${S_MIN}.${S_PATCH}-${try_build}"
-    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://llmster.lmstudio.ai/download/${PROBE}-linux-x64.full.tar.gz" 2>/dev/null || echo "000")
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
-      LATEST_SERVER_VERSION="$PROBE"
+log "Resolving the latest upstream versions"
+server_version="$(server_latest)"
+declare -a changed=()
+for channel in "${CHANNELS[@]}"; do
+  for system in "${SYSTEMS[@]}"; do
+    current="$(jq -r --arg c "$channel" --arg s "$system" '.[$c][$s].version // empty' "$sources")"
+    if [ -z "$current" ]; then
+      fail "sources.json holds no ${channel}/${system} pin" config-error
+    fi
+    if [ "$channel" = server ]; then
+      latest="$server_version"
     else
-      break
+      latest="$(desktop_latest "$channel" "$system")"
+    fi
+    if [ "$latest" = "$current" ]; then
+      log "${channel}/${system}: ${current} is current"
+    else
+      log "${channel}/${system}: ${current} -> ${latest}"
+      changed+=("${channel} ${system} ${current} ${latest}")
     fi
   done
+done
 
-  # Probe next patch
-  if [ -z "$LATEST_SERVER_VERSION" ]; then
-    PROBE="${S_MAJ}.${S_MIN}.$((S_PATCH + 1))-1"
-    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://llmster.lmstudio.ai/download/${PROBE}-linux-x64.full.tar.gz" 2>/dev/null || echo "000")
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
-      LATEST_SERVER_VERSION="$PROBE"
-    fi
-  fi
-
-  # Probe next minor
-  if [ -z "$LATEST_SERVER_VERSION" ]; then
-    PROBE="${S_MAJ}.$((S_MIN + 1)).0-1"
-    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://llmster.lmstudio.ai/download/${PROBE}-linux-x64.full.tar.gz" 2>/dev/null || echo "000")
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
-      LATEST_SERVER_VERSION="$PROBE"
-    fi
-  fi
-
-  if [ -z "$LATEST_SERVER_VERSION" ]; then
-    LATEST_SERVER_VERSION="$CURRENT_SERVER_VERSION"
-    log "No newer server version found, staying at: $LATEST_SERVER_VERSION"
-  else
-    log "Found newer server version via probing: $LATEST_SERVER_VERSION"
-  fi
-fi
-
-log "Latest server version: $LATEST_SERVER_VERSION"
-
-# --- Compare versions ---
-DESKTOP_CHANGED=false
-BETA_CHANGED=false
-SERVER_CHANGED=false
-
-if [ "$CURRENT_DESKTOP_VERSION" != "$LATEST_DESKTOP_VERSION" ]; then
-  DESKTOP_CHANGED=true
-  log "Stable update found: $CURRENT_DESKTOP_VERSION → $LATEST_DESKTOP_VERSION"
-fi
-
-if [ "$CURRENT_BETA_VERSION" != "$LATEST_BETA_VERSION" ]; then
-  BETA_CHANGED=true
-  log "Beta update found: $CURRENT_BETA_VERSION → $LATEST_BETA_VERSION"
-fi
-
-if [ "$CURRENT_SERVER_VERSION" != "$LATEST_SERVER_VERSION" ]; then
-  SERVER_CHANGED=true
-  log "Server update found: $CURRENT_SERVER_VERSION → $LATEST_SERVER_VERSION"
-fi
-
-if [ "$DESKTOP_CHANGED" = false ] && [ "$BETA_CHANGED" = false ] && [ "$SERVER_CHANGED" = false ]; then
+if [ "${#changed[@]}" -eq 0 ]; then
   log "Already up to date"
+  output "package_name" "lmstudio"
   output "updated" "false"
   exit 0
 fi
 
+read -r head_channel _ head_old head_new <<<"${changed[0]}"
+output "package_name" "$(package_of "$head_channel")"
 output "updated" "true"
-output "old_version" "$CURRENT_DESKTOP_VERSION"
-output "new_version" "$LATEST_DESKTOP_VERSION"
+output "old_version" "$head_old"
+output "new_version" "$head_new"
 output "upstream_url" "https://lmstudio.ai/"
 
-DUMMY_HASH="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-
-# --- Update stable ---
-if [ "$DESKTOP_CHANGED" = true ]; then
-  log "Updating stable.nix version..."
-  sed -i "s|version = \"${CURRENT_DESKTOP_VERSION}\"|version = \"${LATEST_DESKTOP_VERSION}\"|" stable.nix
-
-  log "Extracting stable hash..."
-  CURRENT_HASH=$(grep -oP 'hash\s*=\s*"sha256-\K[^"]*' stable.nix | head -1)
-  sed -i "s|hash = \"sha256-${CURRENT_HASH}\"|hash = \"${DUMMY_HASH}\"|" stable.nix
-  BUILD_OUTPUT=$(nix build .#lmstudio 2>&1 || true)
-  NEW_HASH=$(echo "$BUILD_OUTPUT" | grep -oP 'got:\s+sha256-\K\S+' | head -1)
-
-  if [ -z "$NEW_HASH" ]; then
-    err "Failed to extract stable hash"
-    output "error_type" "hash-extraction"
-    exit 1
+for entry in "${changed[@]}"; do
+  read -r channel system _ version <<<"$entry"
+  url="$(artifact_url "$channel" "$system" "$version")"
+  log "Prefetching ${channel}/${system} ${version} from ${url}"
+  if ! prefetched="$(nix store prefetch-file --json "$url")"; then
+    fail "could not prefetch ${url}" hash-extraction
   fi
-
-  sed -i "s|hash = \"${DUMMY_HASH}\"|hash = \"sha256-${NEW_HASH}\"|" stable.nix
-  log "Stable hash: sha256-$NEW_HASH"
-fi
-
-# --- Update beta ---
-if [ "$BETA_CHANGED" = true ]; then
-  log "Updating beta.nix version..."
-  sed -i "s|version = \"${CURRENT_BETA_VERSION}\"|version = \"${LATEST_BETA_VERSION}\"|" beta.nix
-
-  log "Extracting beta hash..."
-  CURRENT_HASH=$(grep -oP 'hash\s*=\s*"sha256-\K[^"]*' beta.nix | head -1)
-  sed -i "s|hash = \"sha256-${CURRENT_HASH}\"|hash = \"${DUMMY_HASH}\"|" beta.nix
-  BUILD_OUTPUT=$(nix build .#lmstudio-beta 2>&1 || true)
-  NEW_HASH=$(echo "$BUILD_OUTPUT" | grep -oP 'got:\s+sha256-\K\S+' | head -1)
-
-  if [ -z "$NEW_HASH" ]; then
-    err "Failed to extract beta hash"
-    output "error_type" "hash-extraction"
-    exit 1
+  hash="$(jq -re '.hash' <<<"$prefetched")" || fail "the prefetch of ${url} reported no hash" hash-extraction
+  store_path="$(jq -re '.storePath' <<<"$prefetched")" || fail "the prefetch of ${url} reported no store path" hash-extraction
+  if [ "$channel" = server ]; then
+    verify_upstream_sha512 "$url" "$store_path"
   fi
+  pin "$channel" "$system" "$version" "$hash"
+  log "${channel}/${system}: pinned ${version} ${hash}"
+done
 
-  sed -i "s|hash = \"${DUMMY_HASH}\"|hash = \"sha256-${NEW_HASH}\"|" beta.nix
-  log "Beta hash: sha256-$NEW_HASH"
+system_here="$(nix eval --impure --raw --expr builtins.currentSystem)"
+
+log "Step 1/3: evaluate every system"
+if ! nix flake check --no-build --all-systems; then
+  fail "the flake no longer evaluates" eval-error
 fi
 
-# --- Update server ---
-if [ "$SERVER_CHANGED" = true ]; then
-  log "Updating server.nix version..."
-  sed -i "s|version = \"${CURRENT_SERVER_VERSION}\"|version = \"${LATEST_SERVER_VERSION}\"|" server.nix
-
-  log "Extracting server hash..."
-  CURRENT_HASH=$(grep -oP 'hash\s*=\s*"sha256-\K[^"]*' server.nix | head -1)
-  sed -i "s|hash = \"sha256-${CURRENT_HASH}\"|hash = \"${DUMMY_HASH}\"|" server.nix
-  BUILD_OUTPUT=$(nix build .#lmstudio-server 2>&1 || true)
-  NEW_HASH=$(echo "$BUILD_OUTPUT" | grep -oP 'got:\s+sha256-\K\S+' | head -1)
-
-  if [ -z "$NEW_HASH" ]; then
-    err "Failed to extract server hash"
-    output "error_type" "hash-extraction"
-    exit 1
+log "Step 2/3: build every package for ${system_here}"
+for package in lmstudio lmstudio-beta lmstudio-server; do
+  if ! nix build ".#${package}" --no-link --print-build-logs; then
+    fail "${package} failed to build on ${system_here}" build-error
   fi
+done
 
-  sed -i "s|hash = \"${DUMMY_HASH}\"|hash = \"sha256-${NEW_HASH}\"|" server.nix
-  log "Server hash: sha256-$NEW_HASH"
+log "Step 3/3: shape of the built outputs"
+desktop_out="$(nix build .#lmstudio --no-link --print-out-paths)"
+mapfile -t desktop_files < <(find "${desktop_out}/share/applications" -type f -name '*.desktop')
+if [ "${#desktop_files[@]}" -ne 1 ]; then
+  fail "expected one desktop file under ${desktop_out}/share/applications, found ${#desktop_files[@]}" desktop-file
 fi
-
-# --- Verification chain ---
-log "Running verification chain..."
-
-# 1. Eval check
-log "Step 1/4: nix flake check --no-build"
-if ! nix flake check --no-build 2>&1; then
-  err "Eval check failed"
-  output "error_type" "eval-error"
-  exit 1
-fi
-
-# 2. Build desktop
-log "Step 2/4: nix build .#lmstudio"
-if ! nix build .#lmstudio --no-link --print-build-logs 2>&1; then
-  err "Desktop build failed"
-  output "error_type" "build-error"
-  exit 1
-fi
-
-# 3. Desktop file verification
-log "Step 3/4: Desktop file verification"
-nix build .#lmstudio
-DESKTOP_FILE=$(find result/share/applications/ -name "*.desktop" 2>/dev/null | head -1 || true)
-grep -q . <<<"$DESKTOP_FILE" || {
-  warn "No desktop file found"
-}
-rm -f result
-
-# 4. Build + verify server
-log "Step 4/4: nix build .#lmstudio-server + ldd check"
-if ! nix build .#lmstudio-server --print-build-logs 2>&1; then
-  err "Server build failed"
-  output "error_type" "build-error"
-  exit 1
-fi
-
-# ldd check (ignore libcuda — runtime only)
-FOUND=$(find result/bin/ \( -type f -o -type l \) -name "lms" 2>/dev/null | head -1)
-FILE_TYPE=$(file "$FOUND" 2>/dev/null || true)
-if [ -n "$FOUND" ] && grep -q ELF <<<"$FILE_TYPE"; then
-  MISSING=$(ldd "$FOUND" 2>&1 | grep "not found" | grep -v libcuda || true)
-  if [ -n "$MISSING" ]; then
-    err "Missing shared libraries:"
-    echo "$MISSING"
-    output "error_type" "missing-deps"
-    exit 1
+server_out="$(nix build .#lmstudio-server --no-link --print-out-paths)"
+for binary in lms llmster; do
+  if ! reported="$("${server_out}/bin/${binary}" version 2>&1)"; then
+    err "${server_out}/bin/${binary} version failed:"
+    echo "$reported"
+    fail "the built ${binary} does not run" smoke-test
   fi
-fi
+  if ! grep -q -- "$(jq -r --arg s "$system_here" '.server[$s].version' "$sources" | tr '-' '+')" <<<"$reported"; then
+    err "${binary} version reported:"
+    echo "$reported"
+    fail "the built ${binary} does not report the pinned server version" smoke-test
+  fi
+done
 
-# Clean up
-rm -f result
-
-log "Update verified: $CURRENT_DESKTOP_VERSION → $LATEST_DESKTOP_VERSION"
+log "Update verified for ${system_here}: $(printf '%s; ' "${changed[@]}")"
 exit 0

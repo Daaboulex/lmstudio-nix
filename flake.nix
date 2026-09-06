@@ -1,13 +1,9 @@
 {
-  description = "LM Studio — local LLM inference desktop app and server";
+  description = "LM Studio, the local LLM desktop app and headless server, for x86-64 and arm64 Linux";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
-    # ROCm 6.4.3 libs — LM Studio's ROCm llama.cpp engine is compiled against
-    # ROCm 6.x. nixpkgs-unstable has ROCm 7.x (ABI-incompatible); nixos-25.11 has
-    # ROCm 6.4.3 (first with full RDNA 4 / gfx1201). Remove once LM Studio ships
-    # a ROCm 7.x engine.
+    # LM Studio's ROCm engine is built against the ROCm 6 ABI; nixos-unstable carries ROCm 7.
     nixpkgs-rocm6.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     flake-parts.url = "github:hercules-ci/flake-parts";
@@ -29,26 +25,29 @@
   outputs =
     inputs@{ flake-parts, self, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
-      systems = [ "x86_64-linux" ];
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
 
       imports = [ inputs.std.flakeModules.base ];
 
-      flake.overlays.default = final: _prev: {
-        lmstudio = final.callPackage ./stable.nix {
+      flake.overlays.default =
+        final: _prev:
+        let
           rocm6 = import inputs.nixpkgs-rocm6 { localSystem.system = final.stdenv.hostPlatform.system; };
+        in
+        {
+          lmstudio = final.callPackage ./stable.nix { inherit rocm6; };
+          lmstudio-beta = final.callPackage ./beta.nix { inherit rocm6; };
+          lmstudio-server = final.callPackage ./server.nix { };
         };
-        lmstudio-beta = final.callPackage ./beta.nix {
-          rocm6 = import inputs.nixpkgs-rocm6 { localSystem.system = final.stdenv.hostPlatform.system; };
-        };
-        lmstudio-server = final.callPackage ./server.nix { };
-      };
       flake.nixosModules.default = import ./nixos-module.nix;
       flake.homeModules.default = import ./hm-module.nix;
 
       perSystem =
         { system, self', ... }:
         let
-          # LM Studio is an unfree prebuilt app; rocm6 from nixos-25.11.
           pkgs = import inputs.nixpkgs {
             inherit system;
             config.allowUnfree = true;
@@ -86,7 +85,7 @@
             overlays = [ self.overlays.default ];
             module = ./nixos-module.nix;
             config = {
-              nixpkgs.config.allowUnfree = true; # lmstudio-server is unfree
+              nixpkgs.config.allowUnfree = true;
               services.lmstudio.enable = true;
             };
           };

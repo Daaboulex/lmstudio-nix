@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 <!-- END generated:badges -->
 
-A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS — local LLM inference with both a desktop GUI and headless server/CLI.
+A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS: the desktop app and the headless server with its `lms` CLI, for local LLM inference on x86-64 and arm64 Linux.
 
 <!-- BEGIN generated:upstream -->
 ## Upstream
@@ -21,23 +21,38 @@ A Nix flake for [LM Studio](https://lmstudio.ai/) on NixOS — local LLM inferen
 
 ## What Is This?
 
-A Nix flake that wraps LM Studio's stable + beta + server binaries into NixOS-portable packages with full CI infrastructure:
+A Nix flake that wraps LM Studio's stable and beta desktop builds and the headless server into NixOS packages, with the automation to keep them current:
 
-- **Daily upstream check** at 06:00 UTC tracking three channels (stable, beta, server) — commits to `main` on hash change
-- **Pre-publish verification** — eval + desktop build + `.desktop` check + server build + ldd check, all green before push
-- **GPU runtime injection** — bundles ROCm + CUDA + Vulkan + OpenCL libs so LM Studio's bundled llama.cpp engines can detect any GPU
-- **Two integration paths** — system-level `services.lmstudio` (multi-user / server) or user-level `programs.lmstudio` HM module (desktop with optional autostart user daemon)
-- **Stable + Beta channels** — both shipped as `pkgs.lmstudio` and `pkgs.lmstudio-beta` via the overlay
+- **Two architectures**: every package builds on `x86_64-linux` and `aarch64-linux` from the AppImage or tarball upstream publishes for that architecture, and CI proves both on native runners.
+- **Daily upstream check** at 06:00 UTC over three channels (stable, beta, server) and both architectures; a pin that moved is committed to `main`.
+- **Pre-publish verification**: every system evaluates, every package builds for the runner's architecture, the desktop file is present, and the built `lms` and `llmster` run offline and report the pinned version, all green before the push.
+- **GPU runtime injection**: the desktop app runs in an FHS environment carrying Vulkan, OpenCL and the libraries LM Studio's bundled ROCm runtime dlopens, with the host's GPU driver on the library path; ROCm 6 libraries are added on x86-64, the one architecture upstream ships a ROCm engine for.
+- **Two integration paths**: the system-level `services.lmstudio` daemon (multi-user or server) or the user-level `programs.lmstudio` Home Manager module (desktop with an optional user daemon).
+- **Stable and beta channels**: `pkgs.lmstudio` and `pkgs.lmstudio-beta` through the overlay.
 
 ## Features
 
 - **Desktop App** (`lmstudio`): AppImage-based GUI with Wayland support, GPU driver injection, and desktop integration (icons, `.desktop` file).
-- **Beta Channel** (`lmstudio-beta`): Track the LM Studio beta release channel for early access features.
-- **Server/CLI** (`lmstudio-server`): Headless `llmster` daemon and `lms` CLI for model management and OpenAI-compatible API serving.
-- **GPU Acceleration**: ROCm (AMD), CUDA (NVIDIA), Vulkan, and OpenCL support bundled — GPU drivers injected automatically.
-- **NixOS Module**: System-level `lmstudio` daemon with systemd service, firewall, and dedicated user.
-- **Home Manager Module**: User-level desktop app installation with channel selection (stable/beta) and optional user daemon with autostart.
-- **Automated Updates**: Daily tracking of both stable and beta upstream versions, hash extraction, build verification, and silent push to main.
+- **Beta Channel** (`lmstudio-beta`): tracks the LM Studio beta release channel.
+- **Server/CLI** (`lmstudio-server`): headless `llmster` daemon and `lms` CLI for model management and OpenAI-compatible API serving.
+- **GPU Acceleration**: CUDA (NVIDIA) and Vulkan on both architectures, ROCm (AMD) on x86-64; the GPU driver is injected automatically.
+- **NixOS Module**: system-level `lmstudio` daemon with systemd service, firewall, and dedicated user.
+- **Home Manager Module**: user-level desktop app installation with channel selection (stable/beta) and an optional user daemon with autostart.
+- **Automated Updates**: daily tracking of every channel on both architectures, hash extraction, build verification, and a silent push to main.
+
+## Architectures
+
+Each channel is pinned per architecture in `sources.json`, because upstream publishes one artifact per architecture and may move them independently. The package for a system reads its own pin:
+
+| | `x86_64-linux` | `aarch64-linux` |
+|---|---|---|
+| Desktop artifact | `LM-Studio-<version>-x64.AppImage` | `LM-Studio-<version>-arm64.AppImage` |
+| Server artifact | `<version>-linux-x64.full.tar.gz` | `<version>-linux-arm64.full.tar.gz` |
+| Engines in the desktop bundle (0.4.23-1) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
+| Engines in the server bundle (0.0.13-1) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
+| ROCm 6 libraries injected | yes | no (upstream ships no ROCm engine for arm64) |
+
+The x86-64 server bundle is upstream's generic `full` variant. Upstream's installer script picks a `full+cuda12` variant instead on hosts whose NVIDIA driver is 550.54.14 or newer; that variant is not packaged here.
 
 <!-- BEGIN generated:installation -->
 ## Installation
@@ -90,7 +105,7 @@ NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-server' -
 2. Use the overlay or add the package directly:
 
    ```nix
-   # Via overlay (recommended — makes pkgs.lmstudio, pkgs.lmstudio-beta,
+   # Via overlay (recommended: makes pkgs.lmstudio, pkgs.lmstudio-beta,
    # and pkgs.lmstudio-server available)
    nixpkgs.overlays = [ inputs.lmstudio.overlays.default ];
    environment.systemPackages = [ pkgs.lmstudio ];
@@ -103,11 +118,11 @@ NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-server' -
 
 ## GPU Setup
 
-LM Studio manages its own inference backends (llama.cpp engines) internally in `~/.lmstudio/`. The package provides the GPU runtime libraries so these backends can detect and use your GPU.
+LM Studio manages its own inference backends (llama.cpp engines) internally in its home directory. The package provides the GPU runtime libraries so these backends can detect and use your GPU.
 
-### AMD GPUs (ROCm)
+### AMD GPUs (ROCm, x86-64 only)
 
-ROCm runtime libraries are bundled in the desktop package. After launching LM Studio:
+ROCm 6 runtime libraries are bundled in the x86-64 desktop package. After launching LM Studio:
 
 1. Go to **Settings > Runtime**
 2. Download the **ROCm llama.cpp** engine
@@ -121,27 +136,31 @@ hardware.graphics.extraPackages = with pkgs; [
 ];
 ```
 
+Upstream ships no ROCm engine for arm64, so the arm64 packages carry no ROCm libraries.
+
 ### NVIDIA GPUs (CUDA)
 
-CUDA libraries are loaded at runtime from the NVIDIA driver. The server package ignores missing `libcuda.so` during build since these are provided by the driver at runtime. After launching:
+CUDA's driver library is loaded at runtime from the NVIDIA driver. The server package ignores the missing `libcuda.so.1` during build since the driver provides it at runtime. After launching:
 
 1. Go to **Settings > Runtime**
 2. Download the **CUDA llama.cpp** engine
 3. Select it as the active GGUF runtime
 
-### Vulkan (all GPUs)
+On arm64 the bundled engine is the **CUDA 13** build upstream made for NVIDIA's arm64 platforms (DGX Spark and similar).
 
-Vulkan support is included via `vulkan-loader` and works out of the box. The **Vulkan llama.cpp** engine is a good cross-platform fallback that works on both AMD and NVIDIA.
+### Vulkan
+
+Vulkan support is included via `vulkan-loader`. The **Vulkan llama.cpp** engine is the cross-vendor fallback on x86-64; upstream ships no Vulkan engine in its arm64 bundles as of 0.4.23-1.
 
 ### Runtime Engines
 
-LM Studio downloads and manages its own llama.cpp inference engines in `~/.lmstudio/`. These include CPU-only, Vulkan, CUDA, and ROCm variants. The "Update" and "Download" buttons in **Settings > Runtime** are the app managing its own backends — this is normal, not a packaging issue.
+LM Studio downloads and manages its own llama.cpp inference engines in its home directory. These include CPU-only, Vulkan, CUDA, and ROCm variants where upstream builds them for the architecture. The "Update" and "Download" buttons in **Settings > Runtime** are the app managing its own backends; this is normal, not a packaging issue.
 
 ### GPU Detection Notes
 
 The package provides the system libraries LM Studio's bundled ROCm runtime dlopens
 (`numactl`, `libdrm`, `elfutils`, `zlib`, `zstd`), so the **ROCm** engine loads and
-enumerates AMD GPUs — including integrated Radeon graphics — with their VRAM.
+enumerates AMD GPUs, including integrated Radeon graphics, with their VRAM.
 
 - **The Vulkan engine hides the integrated GPU when a discrete GPU is present** (an
   upstream ggml-vulkan behavior). Prefer the **ROCm** engine to use an AMD iGPU; or,
@@ -189,19 +208,6 @@ programs.lmstudio = {
 
 The user daemon runs as a systemd user service. Enable `autostart` to have it start automatically on login.
 
-### Channel Selection (with wrapper module)
-
-If using the provided `myModules.home.lmstudio` wrapper:
-
-```nix
-myModules.home.lmstudio = {
-  enable = true;
-  channel = "beta";  # "stable" (default) or "beta"
-  server.enable = true;
-  server.autostart = true;
-};
-```
-
 ## Automation & CI
 
 Three GitHub Actions workflows keep the package up to date and verified:
@@ -210,18 +216,18 @@ Three GitHub Actions workflows keep the package up to date and verified:
 
 Runs **daily at 06:00 UTC** (and on manual dispatch):
 
-1. Checks latest stable version via redirect from `lmstudio.ai`
-2. Checks latest beta version via `?channel=beta`
-3. Checks latest server version from `llmster.lmstudio.ai`
-4. Updates version strings and extracts new SRI hashes
-5. Runs full verification chain: eval, desktop build, desktop file check, server build, ldd check
-6. On success: silent push to main. On failure: creates GitHub Issue with build log and recovery branch
+1. Resolves the latest stable and beta desktop version per architecture from the `lmstudio.ai` download redirect, and the latest server version from the `APP_VERSION` upstream's own installer script pins
+2. Prefetches every artifact whose pin moved and, for the server, checks the download against the `.sha512` upstream publishes next to it
+3. Writes the new pins to `sources.json`
+4. Runs the verification chain: eval of every system, a build of every package for the runner's architecture, the desktop file, and an offline `lms version` and `llmster version` of the built server
+5. On success: silent push to main. On failure: creates a GitHub Issue with the log and a recovery branch
 
 ### Build CI (`ci.yml`)
 
 Runs on every push and PR: an AI-artifact guard, then builds every output the
 flake declares (stable/beta desktop + server packages, plus the standard's
-lint/conformance/schema and both module-eval checks) via `nix-fast-build`.
+lint/conformance/schema and both module-eval checks) via `nix-fast-build`, once
+on an x86-64 runner and once on an arm64 runner.
 
 ### Maintenance (`maintenance.yml`)
 
@@ -245,7 +251,8 @@ nix build .#lmstudio-server        # Build server
 nix run                            # Run desktop
 nix run .#lmstudio-server -- --help  # Run server CLI
 nix fmt                            # Format code
-nix flake check                    # Run all checks
+nix flake check                    # Run all checks for this system
+scripts/update.sh                  # Pull the latest upstream pins and verify them
 ```
 
 ## License

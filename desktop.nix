@@ -1,34 +1,36 @@
 {
   lib,
+  stdenv,
   appimageTools,
   fetchurl,
   makeWrapper,
   graphicsmagick,
   addDriverRunpath,
-  stdenv,
-  ocl-icd,
-  vulkan-loader,
-  # ROCm 6.4.3 from nixos-25.11 — LM Studio's ROCm engine needs 6.x ABI.
-  # First version with RDNA 4 (gfx1201) support. Remove once LM Studio ships ROCm 7.x.
   rocm6,
-  # Arguments for multi-channel support (stable / beta)
-  version,
-  hash,
+  channel,
 }:
 
 let
   pname = "lmstudio";
+  inherit (stdenv.hostPlatform) system;
+  upstreamArch =
+    {
+      x86_64-linux = "x64";
+      aarch64-linux = "arm64";
+    }
+    .${system};
+  source = (lib.importJSON ./sources.json).${channel}.${system};
+  inherit (source) version;
 
   src = fetchurl {
-    url = "https://installers.lmstudio.ai/linux/x64/${version}/LM-Studio-${version}-x64.AppImage";
-    inherit hash;
+    url = "https://installers.lmstudio.ai/linux/${upstreamArch}/${version}/LM-Studio-${version}-${upstreamArch}.AppImage";
+    inherit (source) hash;
   };
 
   appimageContents = appimageTools.extract { inherit pname version src; };
 
-  # ROCm 6.4.3 libraries from nixos-25.11 — LM Studio's ROCm engine is built against
-  # the 6.x ABI; nixpkgs-unstable has 7.x. First version with RDNA 4 (gfx1201).
-  rocm6Libs = [
+  # LM Studio's ROCm engine exists for x64 only and is built against the ROCm 6 ABI.
+  rocm6Libs = lib.optionals stdenv.hostPlatform.isx86_64 [
     rocm6.rocmPackages.clr
     rocm6.rocmPackages.rocm-runtime
     rocm6.rocmPackages.rocblas
@@ -36,7 +38,18 @@ let
     rocm6.rocmPackages.rocm-smi
   ];
 
-  rocm6LibPath = lib.makeLibraryPath rocm6Libs;
+  wrapperArgs =
+    lib.optionals stdenv.hostPlatform.isx86_64 [
+      "--set"
+      "HSA_ENABLE_SDMA"
+      "0"
+    ]
+    ++ [
+      "--prefix"
+      "LD_LIBRARY_PATH"
+      ":"
+      (lib.makeLibraryPath ([ addDriverRunpath.driverLink ] ++ rocm6Libs))
+    ];
 in
 appimageTools.wrapType2 {
   inherit pname version src;
@@ -46,24 +59,19 @@ appimageTools.wrapType2 {
     makeWrapper
   ];
 
-  # LM Studio bundles its own ROCm runtime (extensions/backends/vendor/), a generic
-  # Linux build that dlopens these base libs from the system. The FHS must carry them
-  # or its libamdhip64/libhsa-runtime fail to load and the ROCm hardware survey errors
-  # out ("load lib failed"). rocm6Libs below stay on LD_LIBRARY_PATH as a fallback.
-  extraPkgs =
-    pkgs: with pkgs; [
-      ocl-icd
-      vulkan-loader
-      numactl # libnuma.so.1
-      libdrm # libdrm.so.2, libdrm_amdgpu.so.1
-      elfutils # libelf.so.1
-      zlib # libz.so.1
-      zstd # libzstd.so.1
-    ];
+  # The bundled ROCm runtime dlopens libnuma, libdrm, libelf, libz and libzstd from the system.
+  extraPkgs = pkgs: [
+    pkgs.ocl-icd
+    pkgs.vulkan-loader
+    pkgs.numactl
+    pkgs.libdrm
+    pkgs.elfutils
+    pkgs.zlib
+    pkgs.zstd
+  ];
 
   extraInstallCommands = ''
-    # Desktop-file basename must equal the Electron Wayland app_id (LM-Studio) so
-    # KWin/GNOME resolve the window icon; StartupWMClass=LM-Studio stays for X11.
+    # The desktop file's basename must equal the Electron Wayland app_id for KWin and GNOME to find the window icon.
     desktop=$out/share/applications/LM-Studio.desktop
 
     mapfile -t desktopFiles < <(find ${appimageContents} -type f -name '*.desktop')
@@ -112,27 +120,30 @@ appimageTools.wrapType2 {
       gm convert "$srcIcon" -resize "$size" "$out/share/icons/hicolor/$size/apps/$iconName.png"
     done
 
-    # GPU driver + ROCm 6.x libs on LD_LIBRARY_PATH; Wayland hints only under Wayland.
-    wrapProgram $out/bin/${pname} \
-      --set HSA_ENABLE_SDMA 0 \
-      --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib:${rocm6LibPath}" \
+    wrapProgram $out/bin/${pname} ${lib.escapeShellArgs wrapperArgs} \
       --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
 
-    # Extract and patch the bundled lms CLI (available inside the AppImage)
-    if [ -f ${appimageContents}/resources/app/.webpack/lms ]; then
-      install -Dm755 ${appimageContents}/resources/app/.webpack/lms $out/bin/lms
-      patchelf --set-interpreter "${stdenv.cc.bintools.dynamicLinker}" \
-        --set-rpath "${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}" \
-        $out/bin/lms
+    lms=${appimageContents}/resources/app/.webpack/lms
+    if [ ! -f "$lms" ]; then
+      echo "lmstudio: the extracted AppImage holds no lms CLI at resources/app/.webpack/lms" >&2
+      exit 1
     fi
+    install -Dm755 "$lms" $out/bin/lms
+    patchelf --set-interpreter "${stdenv.cc.bintools.dynamicLinker}" \
+      --set-rpath "${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}" \
+      $out/bin/lms
   '';
 
   meta = {
     description = "Desktop application for running local LLMs";
     homepage = "https://lmstudio.ai/";
     license = lib.licenses.unfree;
+    sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];
     maintainers = [ ];
-    platforms = [ "x86_64-linux" ];
+    platforms = [
+      "x86_64-linux"
+      "aarch64-linux"
+    ];
     mainProgram = "lmstudio";
   };
 }

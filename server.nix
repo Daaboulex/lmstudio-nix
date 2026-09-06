@@ -10,13 +10,23 @@
   libxcrypt-legacy,
 }:
 
+let
+  inherit (stdenv.hostPlatform) system;
+  upstreamArch =
+    {
+      x86_64-linux = "x64";
+      aarch64-linux = "arm64";
+    }
+    .${system};
+  source = (lib.importJSON ./sources.json).server.${system};
+in
 stdenv.mkDerivation (finalAttrs: {
   pname = "lmstudio-server";
-  version = "0.0.13-1";
+  inherit (source) version;
 
   src = fetchurl {
-    url = "https://llmster.lmstudio.ai/download/${finalAttrs.version}-linux-x64.full.tar.gz";
-    hash = "sha256-+emDo3ova+WB4tg2XOuFe2eXh8qCI9FCIH/gCw955uQ=";
+    url = "https://llmster.lmstudio.ai/download/${finalAttrs.version}-linux-${upstreamArch}.full.tar.gz";
+    inherit (source) hash;
   };
 
   nativeBuildInputs = [
@@ -25,19 +35,20 @@ stdenv.mkDerivation (finalAttrs: {
   ];
 
   buildInputs = [
-    stdenv.cc.cc.lib # libstdc++
-    libgcc # libatomic, libgomp
-    vulkan-loader # libvulkan.so.1
-    libxcrypt-legacy # libcrypt.so.1
+    stdenv.cc.cc.lib
+    libgcc
+    vulkan-loader
+    libxcrypt-legacy
   ];
 
-  # Bun-compiled binaries break when stripped
+  # Bun-compiled binaries break when stripped.
   dontStrip = true;
 
-  # CUDA libs are provided by the GPU driver at runtime via addDriverRunpath
+  # libcuda comes from the GPU driver; the x64 bundle vendors CUDA 11 under full-version file names its own loader resolves.
   autoPatchelfIgnoreMissingDeps = [
     "libcuda.so.1"
-    "libcuda.so"
+  ]
+  ++ lib.optionals stdenv.hostPlatform.isx86_64 [
     "libcudart.so.11.0"
     "libcublas.so.11"
     "libcublasLt.so.11"
@@ -49,16 +60,11 @@ stdenv.mkDerivation (finalAttrs: {
     runHook preInstall
 
     mkdir -p $out/bin $out/lib/lmstudio-server
-
-    # Copy the full bundle
     cp -r .bundle $out/lib/lmstudio-server/
     cp llmster $out/lib/lmstudio-server/
 
-    # Create wrapper for lms CLI with GPU driver path
     makeBinaryWrapper $out/lib/lmstudio-server/.bundle/lms $out/bin/lms \
       --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib"
-
-    # Create wrapper for llmster daemon with GPU driver path
     makeBinaryWrapper $out/lib/lmstudio-server/llmster $out/bin/llmster \
       --prefix LD_LIBRARY_PATH : "${addDriverRunpath.driverLink}/lib"
 
@@ -69,8 +75,12 @@ stdenv.mkDerivation (finalAttrs: {
     description = "LM Studio headless server and CLI for local LLM inference";
     homepage = "https://lmstudio.ai/";
     license = lib.licenses.unfree;
+    sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];
     maintainers = [ ];
-    platforms = [ "x86_64-linux" ];
+    platforms = [
+      "x86_64-linux"
+      "aarch64-linux"
+    ];
     mainProgram = "lms";
   };
 })

@@ -1,0 +1,32 @@
+{
+  "stable": {
+    "x86_64-linux": {
+      "version": "0.4.23-1",
+      "hash": "sha256-wb3xlSgeJdySGvXJHrJQIDUkDc4SFxQMQwNtbPMDj9g="
+    },
+    "aarch64-linux": {
+      "version": "0.4.23-1",
+      "hash": "sha256-MzPygFB0StS8KTuZWq0AR+ZtiQIJ353QHlgpddOa19Y="
+    }
+  },
+  "beta": {
+    "x86_64-linux": {
+      "version": "0.4.23-1",
+      "hash": "sha256-wb3xlSgeJdySGvXJHrJQIDUkDc4SFxQMQwNtbPMDj9g="
+    },
+    "aarch64-linux": {
+      "version": "0.4.23-1",
+      "hash": "sha256-MzPygFB0StS8KTuZWq0AR+ZtiQIJ353QHlgpddOa19Y="
+    }
+  },
+  "server": {
+    "x86_64-linux": {
+      "version": "0.0.13-1",
+      "hash": "sha256-+emDo3ova+WB4tg2XOuFe2eXh8qCI9FCIH/gCw955uQ="
+    },
+    "aarch64-linux": {
+      "version": "0.0.13-1",
+      "hash": "sha256-7pDO2c3ZemkzgpzBCXhRV1FPEgmYmSEKUX67gHKj8cE="
+    }
+  }
+}
