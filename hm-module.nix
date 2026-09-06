@@ -7,6 +7,7 @@
 
 let
   cfg = config.programs.lmstudio;
+  home = lib.escapeShellArg (toString cfg.home);
 
   # Electron implements no xdg_toplevel_icon, so KWin resolves a Wayland window's icon from the user's icon theme directories.
   iconFiles =
@@ -99,12 +100,21 @@ in
     (lib.mkIf (cfg.enable || cfg.bionic.enable || cfg.server.enable) {
       home.activation.lmstudioHomePointer = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         pointer="$HOME/.lmstudio-home-pointer"
-        if [ ! -e "$pointer" ] && [ ! -e "$HOME/.lmstudio" ] && [ ! -e "$HOME/.cache/lm-studio" ]; then
-          if [[ -v DRY_RUN ]]; then
-            echo "would seed $pointer with ${cfg.home}"
-          else
-            printf '%s' "${cfg.home}" >"$pointer"
+        legacy=""
+        for candidate in "$HOME/.cache/lm-studio" "$HOME/.lmstudio"; do
+          if [ -e "$candidate" ]; then
+            legacy="$candidate"
+            break
           fi
+        done
+        if [ -e "$pointer" ]; then
+          :
+        elif [ -n "$legacy" ]; then
+          warnEcho "LM Studio keeps its home at $legacy, not at ${home}: move that directory to ${home} and the next activation seeds the pointer"
+        elif [[ -v DRY_RUN ]]; then
+          echo "would seed $pointer with ${home}"
+        else
+          printf '%s' ${home} >"$pointer"
         fi
       '';
     })
