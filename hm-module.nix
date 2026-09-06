@@ -116,6 +116,21 @@ in
         else
           printf '%s' ${home} >"$pointer"
         fi
+        for settings in ${home}/settings.json ${home}/apps/bionic/settings.json; do
+          [ -f "$settings" ] || continue
+          folder=$(${pkgs.jq}/bin/jq -r '.downloadsFolder // empty' "$settings")
+          case "$folder" in
+            "$HOME/.lmstudio/"* | "$HOME/.cache/lm-studio/"*) ;;
+            *) continue ;;
+          esac
+          if ${pkgs.procps}/bin/pgrep -f lm-studio >/dev/null; then
+            warnEcho "LM Studio is running with its models folder at $folder, which recreates the legacy home at every start: quit it and activate again, and the folder moves to ${home}/models"
+          elif [[ -v DRY_RUN ]]; then
+            echo "would point downloadsFolder in $settings at ${home}/models"
+          else
+            ${pkgs.jq}/bin/jq --arg d "${home}/models" '.downloadsFolder = $d' "$settings" >"$settings.new" && mv "$settings.new" "$settings"
+          fi
+        done
       '';
     })
 
