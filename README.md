@@ -49,7 +49,7 @@ Each channel is pinned per architecture in `sources.json`, because upstream publ
 | Desktop artifact | `LM-Studio-<version>-x64.AppImage` | `LM-Studio-<version>-arm64.AppImage` |
 | Server artifact | `<version>-linux-x64.full.tar.gz` | `<version>-linux-arm64.full.tar.gz` |
 | Engines in the desktop bundle (0.4.23-1) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
-| Engines in the server bundle (0.0.13-1) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
+| Engines in the server bundle (0.0.23-1) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
 | ROCm 6 libraries injected | yes | no (upstream ships no ROCm engine for arm64) |
 
 The x86-64 server bundle is upstream's generic `full` variant. Upstream's installer script picks a `full+cuda12` variant instead on hosts whose NVIDIA driver is 550.54.14 or newer; that variant is not packaged here.

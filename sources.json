@@ -21,12 +21,12 @@
   },
   "server": {
     "x86_64-linux": {
-      "version": "0.0.13-1",
-      "hash": "sha256-+emDo3ova+WB4tg2XOuFe2eXh8qCI9FCIH/gCw955uQ="
+      "version": "0.0.23-1",
+      "hash": "sha256-4Cs2aM+dBiDe9Bwz8uK99kTyTkQD+GzGL3WZT25zqMA="
     },
     "aarch64-linux": {
-      "version": "0.0.13-1",
-      "hash": "sha256-7pDO2c3ZemkzgpzBCXhRV1FPEgmYmSEKUX67gHKj8cE="
+      "version": "0.0.23-1",
+      "hash": "sha256-IGHzGFXRkiWGytxSg4hroNnNR9HtjnLn9YJ4Rp7Zzrc="
     }
   }
 }
