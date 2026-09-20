@@ -211,19 +211,35 @@ done
 
 system_here="$(nix eval --impure --raw --expr builtins.currentSystem)"
 
-log "Step 1/3: evaluate every system"
+log "Step 1/4: evaluate every system"
 if ! nix flake check --no-build --all-systems; then
   fail "the flake no longer evaluates" eval-error
 fi
 
-log "Step 2/3: build every package for ${system_here}"
+log "Step 2/4: run the full check suite for ${system_here}"
+check_log="$(mktemp)"
+set +e
+nix flake check --no-eval-cache --print-build-logs 2>&1 | tee "$check_log"
+check_status="${PIPESTATUS[0]}"
+set -e
+if [ "$check_status" -ne 0 ]; then
+  if grep -qE "Cannot build '/nix/store/[^']+\.drv'" "$check_log"; then
+    rm -f "$check_log"
+    fail "the full check suite failed on ${system_here}" build-error
+  fi
+  rm -f "$check_log"
+  fail "the full check suite failed on ${system_here}" eval-error
+fi
+rm -f "$check_log"
+
+log "Step 3/4: build every package for ${system_here}"
 for package in lmstudio lmstudio-beta lmstudio-bionic lmstudio-server; do
   if ! nix build ".#${package}" --no-link --print-build-logs; then
     fail "${package} failed to build on ${system_here}" build-error
   fi
 done
 
-log "Step 3/3: the built server runs"
+log "Step 4/4: the built server runs"
 server_out="$(nix build .#lmstudio-server --no-link --print-out-paths)"
 if ! lms_report="$("${server_out}/bin/lms" version 2>&1)"; then
   err "${server_out}/bin/lms version failed:"
