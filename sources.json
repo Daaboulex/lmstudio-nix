@@ -1,42 +1,42 @@
 {
   "stable": {
     "x86_64-linux": {
-      "version": "0.4.23-1",
-      "hash": "sha256-wb3xlSgeJdySGvXJHrJQIDUkDc4SFxQMQwNtbPMDj9g="
+      "version": "0.4.25-1",
+      "hash": "sha256-7KRnRGyDOCRpfovvqzAP5Saf35hOPuQ4X8uthQLwfFM="
     },
     "aarch64-linux": {
-      "version": "0.4.23-1",
-      "hash": "sha256-MzPygFB0StS8KTuZWq0AR+ZtiQIJ353QHlgpddOa19Y="
+      "version": "0.4.25-1",
+      "hash": "sha256-4+8yo3ZW5+Tlza31LnL6kp1fJutgB74WZsduT9uo4IQ="
     }
   },
   "beta": {
     "x86_64-linux": {
-      "version": "0.4.23-1",
-      "hash": "sha256-wb3xlSgeJdySGvXJHrJQIDUkDc4SFxQMQwNtbPMDj9g="
+      "version": "0.4.25-1",
+      "hash": "sha256-7KRnRGyDOCRpfovvqzAP5Saf35hOPuQ4X8uthQLwfFM="
     },
     "aarch64-linux": {
-      "version": "0.4.23-1",
-      "hash": "sha256-MzPygFB0StS8KTuZWq0AR+ZtiQIJ353QHlgpddOa19Y="
+      "version": "0.4.25-1",
+      "hash": "sha256-4+8yo3ZW5+Tlza31LnL6kp1fJutgB74WZsduT9uo4IQ="
     }
   },
   "bionic": {
     "x86_64-linux": {
-      "version": "1.1.1-5",
-      "hash": "sha256-UFjwwQR9iaypAVn/io/5cTMS0POKGkmw9PEWAmtglLw="
+      "version": "1.1.4-3",
+      "hash": "sha256-GQst+fEqeQPQbABsbyrUF8lv5XiPE1HsSZALPhMWlzM="
     },
     "aarch64-linux": {
-      "version": "1.1.1-5",
-      "hash": "sha256-frRX+LUEdb8qTs0PASdsygyb3WjefrKGKBMYczftxq0="
+      "version": "1.1.4-3",
+      "hash": "sha256-qsR2iTEurMfA6TZ/oUYqrlJva8zmtttGJx4bAAS3gio="
     }
   },
   "server": {
     "x86_64-linux": {
-      "version": "0.0.23-1",
-      "hash": "sha256-4Cs2aM+dBiDe9Bwz8uK99kTyTkQD+GzGL3WZT25zqMA="
+      "version": "0.0.25-1",
+      "hash": "sha256-YbP1vCsJeICQlsBuo22TRkP26hmbxw4rLpLDxjs1GJg="
     },
     "aarch64-linux": {
-      "version": "0.0.23-1",
-      "hash": "sha256-IGHzGFXRkiWGytxSg4hroNnNR9HtjnLn9YJ4Rp7Zzrc="
+      "version": "0.0.25-1",
+      "hash": "sha256-SkRDg9YOQaaZQJgJ0KdEZmXu4336CT/yxYVZCmrGPx4="
     }
   }
 }
