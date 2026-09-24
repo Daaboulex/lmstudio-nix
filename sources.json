@@ -21,12 +21,12 @@
   },
   "bionic": {
     "x86_64-linux": {
-      "version": "1.1.4-3",
-      "hash": "sha256-GQst+fEqeQPQbABsbyrUF8lv5XiPE1HsSZALPhMWlzM="
+      "version": "1.1.6-3",
+      "hash": "sha256-QM3Nxtv3m2867TXKWs1q0gUYeuCEywJ0WwQCvU7neZg="
     },
     "aarch64-linux": {
-      "version": "1.1.4-3",
-      "hash": "sha256-qsR2iTEurMfA6TZ/oUYqrlJva8zmtttGJx4bAAS3gio="
+      "version": "1.1.6-3",
+      "hash": "sha256-ckZvwWDCekr5WTn8+uFGe0iMW6+78P4c2QtgA/N4pNU="
     }
   },
   "server": {
