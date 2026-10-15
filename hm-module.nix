@@ -63,7 +63,7 @@ in
     };
 
     server = {
-      enable = lib.mkEnableOption "LM Studio user daemon";
+      enable = lib.mkEnableOption "the LM Studio user daemon, llmster, serving the API on localhost";
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -137,16 +137,14 @@ in
     (lib.mkIf cfg.server.enable {
       systemd.user.services.lmstudio = {
         Unit = {
-          Description = "LM Studio Server (user)";
+          Description = "LM Studio daemon (llmster) and its API server (user)";
           After = [ "default.target" ];
         };
 
-        Service = {
-          Type = "simple";
-          ExecStart = "${cfg.server.package}/bin/lms server start --port ${toString cfg.server.port}";
-          ExecStop = "${cfg.server.package}/bin/lms server stop";
-          Restart = "on-failure";
-          RestartSec = 5;
+        Service = import ./service.nix {
+          inherit lib;
+          inherit (pkgs) writeShellScript;
+          inherit (cfg.server) package port;
         };
 
         Install = lib.mkIf cfg.server.autostart {

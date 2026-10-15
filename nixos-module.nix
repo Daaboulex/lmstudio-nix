@@ -25,6 +25,13 @@ in
       description = "Port for the LM Studio API server.";
     };
 
+    host = lib.mkOption {
+      type = lib.types.str;
+      default = "127.0.0.1";
+      example = "0.0.0.0";
+      description = "Address the LM Studio API server binds to; 0.0.0.0 accepts connections from the network.";
+    };
+
     openFirewall = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -39,6 +46,15 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion =
+          !cfg.openFirewall
+          || !(lib.hasPrefix "127." cfg.host || cfg.host == "::1" || cfg.host == "localhost");
+        message = "services.lmstudio.openFirewall opens port ${toString cfg.port}, but services.lmstudio.host = ${cfg.host} binds the API server to loopback only; set host to an address on the network, such as 0.0.0.0.";
+      }
+    ];
+
     users.users.lmstudio = {
       isSystemUser = true;
       group = "lmstudio";
@@ -49,22 +65,24 @@ in
     users.groups.lmstudio = { };
 
     systemd.services.lmstudio = {
-      description = "LM Studio Server";
+      description = "LM Studio daemon (llmster) and its API server";
       after = [ "network.target" ];
       wantedBy = [ "multi-user.target" ];
 
       environment.HOME = cfg.dataDir;
 
-      serviceConfig = {
-        Type = "simple";
-        User = "lmstudio";
-        Group = "lmstudio";
-        ExecStart = "${cfg.package}/bin/lms server start --port ${toString cfg.port}";
-        ExecStop = "${cfg.package}/bin/lms server stop";
-        StateDirectory = "lmstudio";
-        Restart = "on-failure";
-        RestartSec = 5;
-      };
+      serviceConfig =
+        import ./service.nix {
+          inherit lib;
+          inherit (pkgs) writeShellScript;
+          inherit (cfg) package port;
+          bind = cfg.host;
+        }
+        // {
+          User = "lmstudio";
+          Group = "lmstudio";
+          StateDirectory = "lmstudio";
+        };
     };
 
     networking.firewall.allowedTCPPorts = lib.mkIf cfg.openFirewall [ cfg.port ];

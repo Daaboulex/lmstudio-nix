@@ -195,12 +195,19 @@ The NixOS module runs LM Studio as a system-level daemon (for multi-user or serv
 services.lmstudio = {
   enable = true;
   port = 1234;          # API port (default: 1234)
-  openFirewall = false;  # Open firewall for API port
+  host = "127.0.0.1";   # Address the API binds to; 0.0.0.0 serves the network
+  openFirewall = false;  # Open firewall for API port; needs a host other than loopback
   dataDir = "/var/lib/lmstudio";  # The daemon's home; models and engines live under it
 };
 ```
 
 This creates a dedicated `lmstudio` user/group, a systemd service, and optionally opens the firewall port.
+
+## How the daemon runs
+
+Both modules run the same unit (`service.nix`). The service's main process is `llmster` itself, which stays in the foreground, so systemd supervises the daemon and restarts it if it fails. Once `lms daemon status` reports it running, `lms server start` attaches the API server to it on the configured port; stopping the service runs `lms daemon down`.
+
+The unit does not start the server with `lms server start` alone: that command expects a daemon to be running already, and without one it wakes the install it last recorded in the LM Studio home. With the desktop app in the same home that is the desktop app, which cannot start inside a service with no display, so the unit timed out and restarted every minute. Run `lms server start` by hand only when `llmster` or the app is already up.
 
 ## Home Manager Module
 
@@ -224,7 +231,7 @@ programs.lmstudio = {
 };
 ```
 
-The user daemon runs as a systemd user service. Enable `autostart` to have it start automatically on login.
+The user daemon runs as a systemd user service in the user's LM Studio home, so the desktop app and the daemon share models, engines and settings. Enable `autostart` to have it start automatically on login.
 
 ## Automation & CI
 
