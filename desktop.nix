@@ -100,7 +100,7 @@ appimageTools.wrapType2 {
   extraPkgs = runtimePkgs;
 
   extraInstallCommands = ''
-    mapfile -t desktopFiles < <(find ${appimageContents} -type f -name '*.desktop')
+    mapfile -t desktopFiles < <(find ${appimageContents} -maxdepth 1 -type f -name '*.desktop')
     if [ "''${#desktopFiles[@]}" -eq 0 ]; then
       echo "${pname}: the extracted AppImage holds no .desktop file" >&2
       exit 1
