@@ -47,6 +47,8 @@ jobs:
     needs: gate
     if: needs.gate.outputs.run == 'yes'
     runs-on: ubuntu-latest
+    env:
+      LOG: /tmp/log-evaluation.log
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
       runners: ${{ steps.candidate.outputs.runners }}
@@ -54,12 +56,15 @@ jobs:
       kept: ${{ steps.heal.outputs.kept }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: DeterminateSystems/determinate-nix-action@8d87e8d5e5b8a8309d4281094560f127d9a265f1 # v3.22.5
+      - uses: DeterminateSystems/determinate-nix-action@e847f25223456b3058e12f7fc9d777b6a6f25060 # v3.23.2
         with:
           extra-conf: lazy-trees = false
 
       - name: Update flake.lock
         run: nix flake update
+
+      - name: Run the flake's after-lock-update app
+        run: bash scripts/after-lock-update.sh
 
       # Probe the temporary fixes against the UPDATED inputs, before the
       # verification build. Probing the committed lock instead would read a fix
@@ -73,7 +78,7 @@ jobs:
       - name: Evaluate every declared system
         run: |
           set -o pipefail
-          nix flake check --no-build --all-systems 2>&1 | tee /tmp/lock-build.log
+          nix flake check --no-build --all-systems 2>&1 | tee "$LOG"
 
       - name: Record the candidate
         id: candidate
@@ -85,7 +90,7 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "runners=$runners" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: candidate
           path: /tmp/candidate.patch
@@ -93,10 +98,10 @@ jobs:
 
       - name: Keep the evaluation log for the report
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: log-evaluation
-          path: /tmp/lock-build.log
+          path: ${{ env.LOG }}
 
   verify:
     needs: prepare
@@ -105,14 +110,16 @@ jobs:
       matrix:
         os: ${{ fromJSON(needs.prepare.outputs.runners) }}
     runs-on: ${{ matrix.os }}
+    env:
+      LOG: /tmp/log-${{ matrix.os }}.log
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.sha }}
-      - uses: DeterminateSystems/determinate-nix-action@8d87e8d5e5b8a8309d4281094560f127d9a265f1 # v3.22.5
+      - uses: DeterminateSystems/determinate-nix-action@e847f25223456b3058e12f7fc9d777b6a6f25060 # v3.23.2
         with:
           extra-conf: lazy-trees = false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: candidate
           path: /tmp/candidate
@@ -126,21 +133,20 @@ jobs:
       - name: Build every check for this system
         run: |
           SYS=$(nix eval --impure --raw --expr 'builtins.currentSystem')
+          attempt=$(mktemp)
           build() {
-            nix run --inputs-from . nixpkgs#nix-fast-build -- --skip-cached --no-nom --flake ".#checks.$SYS" 2>&1 | tee /tmp/lock-build.log
-            return "${PIPESTATUS[0]}" # nix-fast-build's real exit, NOT tee's (always 0).
+            nix run --inputs-from . nixpkgs#nix-fast-build -- --skip-cached --no-nom --flake ".#checks.$SYS" 2>&1 | tee "$attempt"
+            local rc="${PIPESTATUS[0]}"
+            cat "$attempt" >>"$LOG"
+            return "$rc"
           }
           set +e
           build
           code=$?
-          # Escalating retry on a transient external-fetch failure (crates.io
-          # rate-limit, registry/CDN blip) so maintenance doesn't open a spurious
-          # "broke build" issue for an infra hiccup, and so an outage lasting
-          # minutes heals inside this run rather than waiting for tomorrow's.
           transient='crates\.io|error: cannot download|unable to download|http error 5[0-9][0-9]|status code: (403|429|5[0-9][0-9])|curl: \(|couldn.t resolve host|connection reset by peer|temporary failure in name resolution|operation timed out'
           for backoff in 60 300 900; do
             [ "$code" -eq 0 ] && break
-            grep -qiE "$transient" /tmp/lock-build.log || break
+            grep -qiE "$transient" "$attempt" || break
             echo "::warning::Transient external-fetch failure during maintenance build; retrying in ${backoff}s."
             sleep "$backoff"
             build
@@ -150,10 +156,10 @@ jobs:
 
       - name: Keep the build log for the report
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: log-${{ matrix.os }}
-          path: /tmp/lock-build.log
+          path: ${{ env.LOG }}
 
   publish:
     needs: [prepare, verify]
@@ -162,7 +168,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.sha }}
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: candidate
           path: /tmp/candidate
@@ -217,116 +223,51 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: log-*
           path: /tmp/logs
+          merge-multiple: true
 
       - name: Gather the failure logs
         run: |
-          : > /tmp/lock-build.log
+          : >/tmp/lock-build.log
           found=0
-          for f in /tmp/logs/*/lock-build.log; do
+          for f in /tmp/logs/log-*.log; do
             [ -f "$f" ] || continue
             found=1
-            printf '=== %s\n' "$(basename "$(dirname "$f")")" >> /tmp/lock-build.log
-            cat "$f" >> /tmp/lock-build.log
+            printf '=== %s\n' "$(basename "$f" .log)" >>/tmp/lock-build.log
+            cat "$f" >>/tmp/lock-build.log
           done
           if [ "$found" = 0 ]; then
-            echo "No job uploaded a log: the run failed before the evaluation or the build started." >> /tmp/lock-build.log
+            echo "No log reached the report: the download found no log-*.log file." >>/tmp/lock-build.log
           fi
 
       - name: Classify failure
         id: classify
         run: bash scripts/classify-build-failure.sh /tmp/lock-build.log
 
-      - name: Issue the failure
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9 (node24)
+      - name: Report the failure
         env:
+          GH_TOKEN: ${{ github.token }}
           FAIL_CLASS: ${{ steps.classify.outputs.class }}
-          FAIL_ATTRS: ${{ steps.classify.outputs.failed_attrs }}
-          FAIL_DRVS: ${{ steps.classify.outputs.failed_drvs }}
+          FAILED_ATTRS: ${{ steps.classify.outputs.failed_attrs }}
+          FAILED_DRVS: ${{ steps.classify.outputs.failed_drvs }}
           HEALED: ${{ needs.prepare.outputs.healed }}
           KEPT: ${{ needs.prepare.outputs.kept }}
-        with:
-          script: |
-            const fs = require('fs');
-            const log = fs.readFileSync('/tmp/lock-build.log', 'utf8');
-            const lastLines = log.split('\n').slice(-80).join('\n');
-            const plain = log.replace(/\x1b\[[0-9;]*m/g, '').split('\n');
-            const at = plain.findIndex(l => /^(\S+> )?\s*error(\[E\d+\])?:/.test(l));
-            const firstError = at < 0 ? [] : [
-              '<details open><summary>First error</summary>',
-              '',
-              '```',
-              ...plain.slice(at, at + 25),
-              '```',
-              '</details>',
-              ''
-            ];
-            const titleBase = 'Maintenance: flake.lock update broke build';
-            const title = `${titleBase} (${process.env.FAIL_CLASS})`;
-
-            // Close any prior open report of the same failure before filing a
-            // fresh one, so a recurring lock-build break does not pile up
-            // duplicate issues (mirrors update.yml's update-failed dedup).
-            // Prefix match: the class suffix varies between rounds.
-            const existing = await github.rest.issues.listForRepo({
-              owner: context.repo.owner, repo: context.repo.repo,
-              labels: 'maintenance', state: 'open'
-            });
-            for (const issue of existing.data) {
-              if (!issue.title.startsWith(titleBase)) continue;
-              await github.rest.issues.update({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: issue.number, state: 'closed',
-                state_reason: 'not_planned'
-              });
-            }
-
-            await github.rest.issues.create({
-              owner: context.repo.owner, repo: context.repo.repo,
-              title,
-              labels: ['maintenance'],
-              body: [
-                '## flake.lock update failed to build',
-                '',
-                'The scheduled `nix flake update` produced a flake.lock that does not evaluate or build on every declared system.',
-                '**flake.lock was NOT pushed.**',
-                '',
-                `**Class**: \`${process.env.FAIL_CLASS}\``,
-                `**Failed attributes**: ${process.env.FAIL_ATTRS || '(none reported)'}`,
-                `**Failed derivations**: ${process.env.FAIL_DRVS || '(none parsed)'}`,
-                `**Temporary fixes kept**: ${process.env.KEPT || '(none)'}`,
-                ...(process.env.HEALED ? [
-                  `**Healed fixes NOT pushed**: \`${process.env.HEALED}\` — they probed as no`,
-                  'longer needed against the new inputs, but the verification was red, so the',
-                  'removal was not pushed. If the removal is what broke it, correct that',
-                  "fix's predicate; otherwise the failure is the lock bump itself.",
-                ] : []),
-                '',
-                'Builds run with --keep-going, so the list above is the COMPLETE',
-                'failure set for this lock -- fix them together, not one per round.',
-                '',
-                ...firstError,
-                '<details><summary>Build log (last 80 lines)</summary>',
-                '',
-                '```',
-                lastLines,
-                '```',
-                '</details>',
-                '',
-                '### Recovery',
-                '```bash',
-                'nix flake update',
-                'nix flake check --no-build --all-systems',
-                'nix build --no-link  # investigate failure',
-                '```',
-                '',
-                '---',
-                '*Created by [maintenance workflow](.github/workflows/maintenance.yml)*'
-              ].join('\n')
-            });
+        run: |
+          fence='```'
+          {
+            printf '## flake.lock update failed to build\n\n'
+            printf "The scheduled \`nix flake update\` produced a flake.lock that does not evaluate or build on every declared system. **flake.lock was NOT pushed.**\n\n"
+            printf "**Class**: \`%s\`\n" "$FAIL_CLASS"
+            printf '**Temporary fixes kept**: %s\n' "${KEPT:-(none)}"
+            if [ -n "$HEALED" ]; then
+              printf "**Healed fixes NOT pushed**: \`%s\`. They probed as no longer needed against the new inputs, but the verification was red, so the removal was not pushed. If the removal is what broke it, correct that predicate; otherwise the lock bump itself broke the build.\n" "$HEALED"
+            fi
+            printf '\n### Recovery\n\n%sbash\nnix flake update\nnix flake check --no-build --all-systems\nnix build --no-link\n%s\n' "$fence" "$fence"
+          } >/tmp/issue-head.md
+          bash scripts/report-failure.sh maintenance "Maintenance: flake.lock update broke build" "Maintenance: flake.lock update broke build ($FAIL_CLASS)" /tmp/issue-head.md /tmp/lock-build.log
 
   cleanup:
     needs: gate

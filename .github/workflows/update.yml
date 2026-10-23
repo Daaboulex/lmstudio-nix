@@ -15,6 +15,8 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    env:
+      LOG: /tmp/log-update.log
     outputs:
       exit_code: ${{ steps.update.outputs.exit_code }}
       updated: ${{ steps.update.outputs.updated }}
@@ -29,7 +31,7 @@ jobs:
       runners: ${{ steps.runners.outputs.runners }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: DeterminateSystems/determinate-nix-action@8d87e8d5e5b8a8309d4281094560f127d9a265f1 # v3.22.5
+      - uses: DeterminateSystems/determinate-nix-action@e847f25223456b3058e12f7fc9d777b6a6f25060 # v3.23.2
         with:
           extra-conf: lazy-trees = false
 
@@ -55,16 +57,19 @@ jobs:
         id: update
         run: |
           set +e
+          attempt=$(mktemp)
           run_update() {
-            bash scripts/update.sh 2>&1 | tee /tmp/update.log
-            return "${PIPESTATUS[0]}" # update.sh's exit, NOT tee's (always 0)
+            bash scripts/update.sh 2>&1 | tee "$attempt"
+            local rc="${PIPESTATUS[0]}"
+            cat "$attempt" >>"$LOG"
+            return "$rc"
           }
           transient_fetch_failure='crates\.io|error: cannot download|unable to download|http error 5[0-9][0-9]|status code: (403|429|5[0-9][0-9])|curl: \(|couldn.t resolve host|connection reset by peer|temporary failure in name resolution|operation timed out'
           run_update
           EXIT_CODE=$?
           for backoff in 60 300 900; do
             [ "$EXIT_CODE" -eq 0 ] && break
-            grep -qiE "$transient_fetch_failure" /tmp/update.log || break
+            grep -qiE "$transient_fetch_failure" "$attempt" || break
             echo "::warning::Transient external-fetch failure during update; retrying in ${backoff}s."
             sleep "$backoff"
             run_update
@@ -123,17 +128,17 @@ jobs:
           runners=$(bash scripts/declared-runners.sh "$built")
           echo "runners=$runners" >> "$GITHUB_OUTPUT"
       - if: steps.candidate.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: candidate
           path: /tmp/candidate.patch
           if-no-files-found: error
       - name: Keep the update log for the report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: log-update
-          path: /tmp/update.log
+          path: ${{ env.LOG }}
 
   verify:
     needs: update
@@ -143,14 +148,16 @@ jobs:
       matrix:
         os: ${{ fromJSON(needs.update.outputs.runners) }}
     runs-on: ${{ matrix.os }}
+    env:
+      LOG: /tmp/log-${{ matrix.os }}.log
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.update.outputs.sha }}
-      - uses: DeterminateSystems/determinate-nix-action@8d87e8d5e5b8a8309d4281094560f127d9a265f1 # v3.22.5
+      - uses: DeterminateSystems/determinate-nix-action@e847f25223456b3058e12f7fc9d777b6a6f25060 # v3.23.2
         with:
           extra-conf: lazy-trees = false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: candidate
           path: /tmp/candidate
@@ -161,9 +168,12 @@ jobs:
       - name: Build every check for this system
         run: |
           SYS=$(nix eval --impure --raw --expr 'builtins.currentSystem')
+          attempt=$(mktemp)
           build() {
-            nix run --inputs-from . nixpkgs#nix-fast-build -- --skip-cached --no-nom --flake ".#checks.$SYS" 2>&1 | tee /tmp/update.log
-            return "${PIPESTATUS[0]}"
+            nix run --inputs-from . nixpkgs#nix-fast-build -- --skip-cached --no-nom --flake ".#checks.$SYS" 2>&1 | tee "$attempt"
+            local rc="${PIPESTATUS[0]}"
+            cat "$attempt" >>"$LOG"
+            return "$rc"
           }
           set +e
           build
@@ -171,7 +181,7 @@ jobs:
           transient='crates\.io|error: cannot download|unable to download|http error 5[0-9][0-9]|status code: (403|429|5[0-9][0-9])|curl: \(|couldn.t resolve host|connection reset by peer|temporary failure in name resolution|operation timed out'
           for backoff in 60 300 900; do
             [ "$code" -eq 0 ] && break
-            grep -qiE "$transient" /tmp/update.log || break
+            grep -qiE "$transient" "$attempt" || break
             echo "::warning::Transient external-fetch failure during the update build; retrying in ${backoff}s."
             sleep "$backoff"
             build
@@ -181,10 +191,10 @@ jobs:
 
       - name: Keep the build log for the report
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: log-${{ matrix.os }}
-          path: /tmp/update.log
+          path: ${{ env.LOG }}
 
   publish:
     needs: [update, verify]
@@ -199,7 +209,7 @@ jobs:
         with:
           ref: ${{ needs.update.outputs.sha }}
       - if: needs.update.outputs.updated == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: candidate
           path: /tmp/candidate
@@ -260,12 +270,6 @@ jobs:
               });
             }
 
-  # Diagnostic issue on failure. Keyed on exit_code==1 alone (not on
-  # `updated`) so config/version-read failures — which never reach the
-  # point of setting `updated` — still surface. A single exit 2 is
-  # transient and files nothing; a week-long streak of them is `stalled`.
-  # An update that built here but fails on another declared system is a
-  # build-error too, and nothing of it is pushed.
   report:
     needs: [update, verify]
     if: >-
@@ -280,7 +284,7 @@ jobs:
         with:
           ref: ${{ needs.update.outputs.sha }}
       - if: needs.update.outputs.sha != ''
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: candidate
           path: /tmp/candidate
@@ -290,37 +294,33 @@ jobs:
           if [ -s /tmp/candidate/candidate.patch ]; then
             git apply --index /tmp/candidate/candidate.patch
           fi
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: log-*
           path: /tmp/logs
+          merge-multiple: true
 
       - name: Gather the failure logs
         run: |
-          : > /tmp/update.log
+          : >/tmp/update.log
           found=0
-          for f in /tmp/logs/log-update/update.log /tmp/logs/log-ubuntu-*/update.log; do
+          for f in /tmp/logs/log-*.log; do
             [ -f "$f" ] || continue
             found=1
-            printf '=== %s\n' "$(basename "$(dirname "$f")")" >> /tmp/update.log
-            cat "$f" >> /tmp/update.log
+            printf '=== %s\n' "$(basename "$f" .log)" >>/tmp/update.log
+            cat "$f" >>/tmp/update.log
           done
           if [ "$found" = 0 ]; then
-            echo "No job uploaded a log: the run failed before the update started." >> /tmp/update.log
+            echo "No log reached the report: the download found no log-*.log file." >>/tmp/update.log
           fi
 
-      # The updater's own log already holds the builder output; name the class
-      # from it so the issue title says what broke, not merely that something
-      # did. maintenance.yml has done this since the classifier existed.
       - name: Classify the failure
         id: classify
         run: bash scripts/classify-build-failure.sh /tmp/update.log
 
-      - name: Create failure issue
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9 (node24)
-        # Pass outputs via env, never interpolate ${{ }} into the script body
-        # (a value containing a quote/newline would break out of the JS).
+      - name: Report the failure
         env:
+          GH_TOKEN: ${{ github.token }}
           ERROR_TYPE: ${{ (needs.verify.result == 'failure' && 'build-error') || needs.update.outputs.error_type || (needs.update.outputs.stalled == 'true' && 'stalled') || '' }}
           OTHER_SYSTEM_FAILED: ${{ needs.verify.result == 'failure' }}
           OLD_VERSION: ${{ needs.update.outputs.old_version }}
@@ -330,115 +330,61 @@ jobs:
           FAIL_CLASS: ${{ steps.classify.outputs.class }}
           FAILED_ATTRS: ${{ steps.classify.outputs.failed_attrs }}
           FAILED_DRVS: ${{ steps.classify.outputs.failed_drvs }}
-        with:
-          script: |
-            const fs = require('fs');
-            const log = fs.readFileSync('/tmp/update.log', 'utf8');
-            const lastLines = log.split('\n').slice(-100).join('\n');
-            const plain = log.replace(/\x1b\[[0-9;]*m/g, '').split('\n');
-            const at = plain.findIndex(l => /^(\S+> )?\s*error(\[E\d+\])?:/.test(l));
-            const firstError = at < 0 ? [] : [
-              '<details open><summary>First error</summary>',
-              '',
-              '```',
-              ...plain.slice(at, at + 25),
-              '```',
-              '</details>',
-              ''
-            ];
-            const errorType = process.env.ERROR_TYPE || 'unknown';
-            const oldV = process.env.OLD_VERSION || '?';
-            const newV = process.env.NEW_VERSION || '?';
-            const upstream = process.env.UPSTREAM_URL || '';
-            const pkg = process.env.PKG || context.repo.repo;
-            const failClass = process.env.FAIL_CLASS || '';
-            const failedAttrs = process.env.FAILED_ATTRS || '';
-            const failedDrvs = process.env.FAILED_DRVS || '';
-            const titleClass = (failClass && failClass !== 'unclassified') ? failClass : errorType;
-            const otherSystem = process.env.OTHER_SYSTEM_FAILED === 'true' ? [
-              'The update built on the update runner but failed on another declared',
-              'system; each log section below names the runner it came from.',
-              ''
-            ] : [];
-            const failureBlock = (failedAttrs || failedDrvs) ? [
-              '### Failing targets, the complete set',
-              '',
-              '```',
-              [failedAttrs, failedDrvs].filter(Boolean).join('\n'),
-              '```',
-              ''
-            ] : [];
+        run: |
+          error_type="${ERROR_TYPE:-unknown}"
+          old="${OLD_VERSION:-?}"
+          new="${NEW_VERSION:-?}"
+          pkg="${PKG:-${GITHUB_REPOSITORY#*/}}"
+          title_class="$error_type"
+          if [ -n "$FAIL_CLASS" ] && [ "$FAIL_CLASS" != unclassified ]; then
+            title_class="$FAIL_CLASS"
+          fi
+          branch="update/$pkg-$new"
+          pushed=no
+          branch_note=""
+          if [ "$error_type" = remirror-needed ] || [ "$error_type" = stalled ]; then
+            branch_note=""
+          elif [ -z "$NEW_VERSION" ]; then
+            branch_note="No attempt branch: the updater reported no target version."
+          elif ! git check-ref-format --branch "$branch" >/dev/null; then
+            branch_note="No attempt branch: '$branch' is not a valid branch name."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            if push_log=$({ git checkout -B "$branch" &&
+              git add -A ':!AI-*.json' &&
+              git commit -m "wip: attempted update $old -> $new" --allow-empty &&
+              git push -f origin "$branch"; } 2>&1); then
+              pushed=yes
+            else
+              printf '%s\n' "$push_log"
+              echo "::warning::the attempt branch $branch was not pushed"
+              branch_note="The attempt branch $branch could not be pushed: $(printf '%s' "$push_log" | tail -n 3)"
+            fi
+          fi
+          {
+            printf '## Update failed: %s %s -> %s\n\n' "$pkg" "$old" "$new"
+            printf "**Failure**: \`%s\`\n" "$error_type"
+            if [ -n "$UPSTREAM_URL" ]; then
+              printf '**Upstream**: %s\n' "$UPSTREAM_URL"
+            fi
+            if [ "$OTHER_SYSTEM_FAILED" = true ]; then
+              printf '\nThe update built on the update runner but failed on another declared system; each log section names the runner it came from.\n'
+            fi
+            if [ "$pushed" = yes ]; then
+              fence='```'
+              printf '\n### Recovery\n\n%sbash\ngit fetch && git checkout %s\nnix flake check --no-eval-cache && nix build --no-link\ngit checkout main && git merge %s\n%s\n' "$fence" "$branch" "$branch" "$fence"
+            fi
+            if [ -n "$branch_note" ]; then
+              printf '\n%s\n' "$branch_note"
+            fi
+          } >/tmp/issue-head.md
+          bash scripts/report-failure.sh update-failed "Update " "Update $pkg $old -> $new: $title_class" /tmp/issue-head.md /tmp/update.log
 
-            const existing = await github.rest.issues.listForRepo({
-              owner: context.repo.owner, repo: context.repo.repo,
-              labels: 'update-failed', state: 'open'
-            });
-            for (const issue of existing.data) {
-              await github.rest.issues.update({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: issue.number, state: 'closed',
-                state_reason: 'not_planned'
-              });
-            }
-
-            // execFileSync passes args straight to git — no shell, so a
-            // pkg/version value with shell metacharacters cannot inject.
-            const { execFileSync } = require('child_process');
-            const git = (...args) => execFileSync('git', args, { stdio: 'inherit' });
-            const branch = `update/${pkg}-${newV}`;
-            let branchPushed = false;
-            // remirror-needed (trackOnly) makes no file changes, and a stalled
-            // streak has no attempt to recover — skip the empty update branch;
-            // the issue itself is the notification.
-            if (errorType !== 'remirror-needed' && errorType !== 'stalled') {
-              try {
-                git('config', 'user.name', 'github-actions[bot]');
-                git('config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com');
-                git('checkout', '-B', branch);
-                git('add', '-A', ':!AI-*.json');
-                git('commit', '-m', `wip: attempted update ${oldV} -> ${newV}`, '--allow-empty');
-                git('push', '-f', 'origin', branch);
-                branchPushed = true;
-              } catch (e) { /* best-effort */ }
-            }
-
-            const recoveryBlock = branchPushed ? [
-              '### Recovery',
-              '```bash',
-              `git fetch && git checkout update/${pkg}-${newV}`,
-              '# Fix the issue, then:',
-              'nix flake check --no-eval-cache && nix build --no-link',
-              `git checkout main && git merge update/${pkg}-${newV}`,
-              '```'
-            ] : [];
-
-            await github.rest.issues.create({
-              owner: context.repo.owner, repo: context.repo.repo,
-              title: `Update ${pkg} ${oldV} -> ${newV}: ${titleClass}`,
-              labels: ['update-failed'],
-              body: [
-                `## Update Failed: ${pkg} ${oldV} -> ${newV}`,
-                '',
-                `**Failure**: \`${errorType}\``,
-                upstream ? `**Upstream**: ${upstream}` : '',
-                '',
-                ...otherSystem,
-                ...failureBlock,
-                ...firstError,
-                '### Build log (last 100 lines)',
-                '<details><summary>Click to expand</summary>',
-                '',
-                '```',
-                lastLines,
-                '```',
-                '</details>',
-                '',
-                ...recoveryBlock,
-                '',
-                '---',
-                '*Created by [update workflow](.github/workflows/update.yml)*'
-              ].filter(Boolean).join('\n')
-            });
+      - name: Fail the run
+        run: |
+          echo "::error::the update failed; it is reported in the open update-failed issue"
+          exit 1
 
   retire:
     needs: [update, verify, publish, report]

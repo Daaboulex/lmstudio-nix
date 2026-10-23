@@ -14,7 +14,7 @@ set -uo pipefail
 #   classify-build-failure.sh <logfile>
 #
 # Outputs (GITHUB_OUTPUT or stdout):
-#   class=<transient-infra|eval-error|sandbox-download|upstream-rerelease-hash-mismatch|nixpkgs-package-drop|
+#   class=<transient-infra|eval-error|compile-error|sandbox-download|upstream-rerelease-hash-mismatch|nixpkgs-package-drop|
 #          missing-python-dep|requirements-coverage|
 #          python-metadata-version-mismatch|substitution-pattern-drift|
 #          unclassified>
@@ -35,7 +35,14 @@ out() { echo "$1=$2" >>"$OUTPUT_FILE"; }
   exit 0
 }
 
-failed_attrs=$(grep -oE 'Failed attributes: .*' "$LOG" | tail -1 | sed 's/Failed attributes: //')
+PLAIN=$(mktemp)
+trap 'rm -f "$PLAIN"' EXIT
+sed 's/\x1b\[[0-9;]*m//g' "$LOG" >"$PLAIN"
+LOG="$PLAIN"
+
+failed_attrs=$(grep -oE 'Failed attributes: .*' "$LOG" | sed 's/Failed attributes: //' |
+  tr ' ' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' ')
+failed_attrs="${failed_attrs% }"
 failed_drvs=$(grep -oE "Cannot build '/nix/store/[^']+\.drv'" "$LOG" |
   sed "s|Cannot build '||; s|'\$||" | sort -u | head -12 | tr '\n' ' ')
 
@@ -46,6 +53,7 @@ grep -qiE "couldn.t resolve host|temporary failure in name resolution|connection
 # transient -- never a repo defect to chase.
 grep -qE "path '[^']+' is not valid|does not exist in the Nix store|no such path in the store" "$LOG" && class=transient-infra
 grep -qE 'nix_fast_build:EVAL: [0-9]+ successes, [1-9]|error: Failed assertions|while evaluating (the attribute|the option|derivation)' "$LOG" && class=eval-error
+grep -qE '\.(c|cc|cpp|cxx|h|hh|hpp|hxx):[0-9]+:[0-9]+: (fatal )?error: |\[-Werror(=[a-z0-9-]+)?\]' "$LOG" && class=compile-error
 grep -q 'file DOWNLOAD cannot compute hash on failed download' "$LOG" && class=sandbox-download
 grep -q 'hash mismatch in fixed-output' "$LOG" && class=upstream-rerelease-hash-mismatch
 grep -qE 'not supported for interpreter python|is marked as broken' "$LOG" && class=nixpkgs-package-drop
