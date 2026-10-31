@@ -1,22 +1,22 @@
 {
   "stable": {
     "x86_64-linux": {
-      "version": "0.4.27-2",
-      "hash": "sha256-OSpUL+W04JSoUXr3SN3NaAl4mkWQNwD17DD+CH1jCpY="
+      "version": "0.4.28-2",
+      "hash": "sha256-o+bPgjNpe+CorWhxGXtCQkKvPFo0ZnGu7VmVntfuvxE="
     },
     "aarch64-linux": {
-      "version": "0.4.27-2",
-      "hash": "sha256-A+09be0+rffqhE5w+qXMFzksThwwvkKB6iQjdDeaP7g="
+      "version": "0.4.28-2",
+      "hash": "sha256-ipmAY1bhZ4RMkp2uMNSfi+jEigqvaJXRfoUWPGY1vNM="
     }
   },
   "beta": {
     "x86_64-linux": {
-      "version": "0.4.27-2",
-      "hash": "sha256-OSpUL+W04JSoUXr3SN3NaAl4mkWQNwD17DD+CH1jCpY="
+      "version": "0.4.28-2",
+      "hash": "sha256-o+bPgjNpe+CorWhxGXtCQkKvPFo0ZnGu7VmVntfuvxE="
     },
     "aarch64-linux": {
-      "version": "0.4.27-2",
-      "hash": "sha256-A+09be0+rffqhE5w+qXMFzksThwwvkKB6iQjdDeaP7g="
+      "version": "0.4.28-2",
+      "hash": "sha256-ipmAY1bhZ4RMkp2uMNSfi+jEigqvaJXRfoUWPGY1vNM="
     }
   },
   "bionic": {
