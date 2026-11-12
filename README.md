@@ -26,7 +26,7 @@ A Nix flake that wraps LM Studio's stable and beta desktop builds, LM Studio Bio
 - **Two architectures**: every package builds on `x86_64-linux` and `aarch64-linux` from the AppImage or tarball upstream publishes for that architecture, and CI proves both on native runners.
 - **Daily upstream check** at 06:00 UTC over four channels (stable, beta, bionic, server) and both architectures; a pin that moved is committed to `main`.
 - **Pre-publish verification**: every system evaluates, every package builds for the runner's architecture, the desktop files are present, and the built `lms` runs and the built `llmster` reports the pinned version offline, all green before the push.
-- **Vendor binaries run as shipped**: the AppImage contents and the server bundle stay byte-identical to upstream's and run inside an FHS environment carrying Vulkan, OpenCL and the libraries LM Studio's bundled ROCm runtime dlopens, with the host's GPU driver on the library path; ROCm 6 libraries are added on x86-64, the one architecture upstream ships a ROCm engine for.
+- **Vendor binaries run as shipped**: the AppImage contents and the server bundle stay byte-identical to upstream's and run inside an FHS environment carrying Vulkan, OpenCL and the libraries LM Studio's bundled ROCm runtime dlopens, with the host's GPU driver on the library path; ROCm 6 libraries are added to the desktop and Bionic packages on x86-64.
 - **Two integration paths**: the system-level `services.lmstudio` daemon (multi-user or server) or the user-level `programs.lmstudio` Home Manager module (desktop apps, the LM Studio home directory, and an optional user daemon).
 - **Stable, beta and Bionic**: `pkgs.lmstudio`, `pkgs.lmstudio-beta` and `pkgs.lmstudio-bionic` through the overlay.
 
@@ -43,17 +43,14 @@ A Nix flake that wraps LM Studio's stable and beta desktop builds, LM Studio Bio
 
 ## Architectures
 
-Each channel is pinned per architecture in `sources.json`, because upstream publishes one artifact per architecture and may move them independently. The package for a system reads its own pin:
+Each channel is pinned per architecture in [`sources.json`](./sources.json), because upstream publishes one artifact per architecture and may move them independently. The package for a system reads its own pin:
 
 | | `x86_64-linux` | `aarch64-linux` |
 |---|---|---|
 | Desktop artifact | `LM-Studio-<version>-x64.AppImage` | `LM-Studio-<version>-arm64.AppImage` |
 | Bionic artifact | `Bionic-<version>-x64.AppImage` | `Bionic-<version>-arm64.AppImage` |
 | Server artifact | `<version>-linux-x64.full.tar.gz` | `<version>-linux-arm64.full.tar.gz` |
-| Engines in the desktop bundle (0.4.23-1) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
-| Engines in the Bionic bundle (1.1.1-5) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
-| Engines in the server bundle (0.0.23-1) | CPU (AVX2), CUDA, Vulkan | CPU, CUDA 13 |
-| ROCm 6 libraries injected | yes | no (upstream ships no ROCm engine for arm64) |
+| ROCm 6 libraries injected into the desktop and Bionic packages | yes | no |
 
 The x86-64 server bundle is upstream's generic `full` variant. Upstream's installer script picks a `full+cuda12` variant instead on hosts whose NVIDIA driver is 550.54.14 or newer; that variant is not packaged here.
 
@@ -80,7 +77,7 @@ Then use the package:
 ```nix
 { pkgs, inputs, ... }:
 {
-  environment.systemPackages = [ inputs.lmstudio.packages.${pkgs.system}.default ];
+  environment.systemPackages = [ inputs.lmstudio.packages.${pkgs.stdenv.hostPlatform.system}.default ];
 }
 ```
 
@@ -92,16 +89,16 @@ Then use the package:
 
 ```bash
 # Desktop GUI (stable)
-NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix' --impure
+nix run 'github:Daaboulex/lmstudio-nix'
 
 # Desktop GUI (beta)
-NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-beta' --impure
+nix run 'github:Daaboulex/lmstudio-nix#lmstudio-beta'
 
 # LM Studio Bionic
-NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-bionic' --impure
+nix run 'github:Daaboulex/lmstudio-nix#lmstudio-bionic'
 
 # Server CLI
-NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-server' --impure
+nix run 'github:Daaboulex/lmstudio-nix#lmstudio-server'
 ```
 
 ### Add to a NixOS flake
@@ -122,7 +119,7 @@ NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-server' -
 
    # Or directly
    environment.systemPackages = [
-     inputs.lmstudio.packages.${pkgs.system}.lmstudio
+     inputs.lmstudio.packages.${pkgs.stdenv.hostPlatform.system}.lmstudio
    ];
    ```
 
@@ -130,7 +127,7 @@ NIXPKGS_ALLOW_UNFREE=1 nix run 'github:Daaboulex/lmstudio-nix#lmstudio-server' -
 
 LM Studio, Bionic, `lms` and `llmster` share one home directory for models, engines and settings. Upstream decides it in `findLMStudioHome` (lmstudio-js, `packages/lms-common-server/src/findLMStudioHome.ts`): the content of `~/.lmstudio-home-pointer` when that file exists, else a legacy `~/.cache/lm-studio` when that directory exists, else `~/.lmstudio`; in the last two cases the app writes the pointer itself. No environment variable and no XDG variable is read.
 
-The Home Manager module therefore seeds the pointer with `programs.lmstudio.home` (default: `$XDG_DATA_HOME/lmstudio`) at activation, only when neither the pointer nor a legacy home exists, and never touches it again; the NixOS daemon runs with `dataDir` as its `HOME`, so its state lives under `/var/lib/lmstudio`.
+The Home Manager module therefore seeds the pointer with `programs.lmstudio.home` (default: `$XDG_DATA_HOME/lmstudio`) at activation, only when the pointer, `~/.cache/lm-studio` and `~/.lmstudio` are all absent. When the pointer is absent and one of those two directories exists, it prints a warning naming the directory to move and does not seed. It never changes an existing pointer. The NixOS daemon runs with `dataDir` as its `HOME`, so its state lives under `/var/lib/lmstudio`.
 
 ## GPU Setup
 
@@ -152,7 +149,7 @@ hardware.graphics.extraPackages = with pkgs; [
 ];
 ```
 
-Upstream ships no ROCm engine for arm64, so the arm64 packages carry no ROCm libraries.
+The arm64 packages carry no ROCm libraries.
 
 ### NVIDIA GPUs (CUDA)
 
@@ -162,11 +159,9 @@ CUDA's driver library is loaded at runtime from the NVIDIA driver through the dr
 2. Download the **CUDA llama.cpp** engine
 3. Select it as the active GGUF runtime
 
-On arm64 the bundled engine is the **CUDA 13** build upstream made for NVIDIA's arm64 platforms (DGX Spark and similar).
-
 ### Vulkan
 
-Vulkan support is included via `vulkan-loader`. The **Vulkan llama.cpp** engine is the cross-vendor fallback on x86-64; upstream ships no Vulkan engine in its arm64 bundles as of 0.4.23-1.
+Vulkan support is included via `vulkan-loader`. The **Vulkan llama.cpp** engine is the cross-vendor fallback on x86-64.
 
 ### Runtime Engines
 
@@ -205,9 +200,9 @@ This creates a dedicated `lmstudio` user/group, a systemd service, and optionall
 
 ## How the daemon runs
 
-Both modules run the same unit (`service.nix`). The service's main process is `llmster` itself, which stays in the foreground, so systemd supervises the daemon and restarts it if it fails. Once `lms daemon status` reports it running, `lms server start` attaches the API server to it on the configured port; stopping the service runs `lms daemon down`.
+Both modules run the same unit ([`service.nix`](./service.nix)). The service's main process is `llmster` itself, which stays in the foreground, so systemd supervises the daemon and restarts it if it fails. Once `lms daemon status` reports it running, `lms server start` attaches the API server to it on the configured port; stopping the service runs `lms daemon down`.
 
-The unit does not start the server with `lms server start` alone: that command expects a daemon to be running already, and without one it wakes the install it last recorded in the LM Studio home. With the desktop app in the same home that is the desktop app, which cannot start inside a service with no display, so the unit timed out and restarted every minute. Run `lms server start` by hand only when `llmster` or the app is already up.
+The unit does not start the server with `lms server start` alone: that command expects a daemon to be running already, and without one it wakes the install it last recorded in the LM Studio home. With the desktop app in the same home that is the desktop app, which cannot start inside a service with no display. Run `lms server start` by hand only when `llmster` or the app is already up.
 
 ## Home Manager Module
 
@@ -233,38 +228,15 @@ programs.lmstudio = {
 
 The user daemon runs as a systemd user service in the user's LM Studio home, so the desktop app and the daemon share models, engines and settings. Enable `autostart` to have it start automatically on login.
 
-## Automation & CI
+## Updates
 
-Three GitHub Actions workflows keep the package up to date and verified:
-
-### Upstream Update (`update.yml`)
-
-Runs **daily at 06:00 UTC** (and on manual dispatch):
+[`update.yml`](./.github/workflows/update.yml) runs daily at 06:00 UTC and on manual dispatch:
 
 1. Resolves the latest stable, beta and Bionic version per architecture from the `lmstudio.ai` download redirects, and the latest server version from the `APP_VERSION` upstream's own installer script pins
 2. Prefetches every artifact whose pin moved and, for the server, checks the download against the `.sha512` upstream publishes next to it
-3. Writes the new pins to `sources.json`
+3. Writes the new pins to [`sources.json`](./sources.json)
 4. Runs the verification chain: eval of every system, a build of every package for the runner's architecture, the desktop files, and an offline `lms version` and `llmster version` of the built server
 5. On success: silent push to main. On failure: creates a GitHub Issue with the log and a recovery branch
-
-### Build CI (`ci.yml`)
-
-Runs on every push and PR: an AI-artifact guard, then builds every output the
-flake declares (the desktop, Bionic and server packages, plus the standard's
-lint/conformance/schema and both module-eval checks) via `nix-fast-build`, once
-on an x86-64 runner and once on an arm64 runner.
-
-### Maintenance (`maintenance.yml`)
-
-Runs **weekly on Sunday at 04:00 UTC**:
-
-- Updates `flake.lock` and test-builds before pushing
-- Cleans up stale `update/*` branches older than 30 days
-
-### Supply Chain Security
-
-- All GitHub Actions are **pinned to commit SHAs** (not mutable tags)
-- SRI hashes (`sha256-...`) used everywhere
 
 ## Development
 
@@ -285,7 +257,7 @@ scripts/update.sh                  # Pull the latest upstream pins and verify th
 
 - **Nix packaging**: Licensed under the [MIT License](LICENSE).
 - **LM Studio software**: Proprietary. This repository does **not** distribute the LM Studio binary -- it only provides instructions to fetch and package it. Your use of LM Studio is subject to the [license terms](https://lmstudio.ai/terms) of LM Studio.
-- **Unfree**: Requires `nixpkgs.config.allowUnfree = true` in your Nix configuration.
+- **Unfree**: the flake's own outputs (`nix run`, `nix build`, `inputs.lmstudio.packages`) need no setting, because the flake allows unfree for them. The overlay packages, which both modules use by default, require `nixpkgs.config.allowUnfree = true` in your Nix configuration.
 
 <!-- BEGIN generated:footer -->
 <!-- END generated:footer -->
