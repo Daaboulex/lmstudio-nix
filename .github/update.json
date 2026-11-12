@@ -5,11 +5,6 @@
   },
   "packageFile": "desktop.nix",
   "versionFile": "sources.json",
-  "verify": {
-    "binary": null,
-    "args": null,
-    "check": "desktop"
-  },
   "description": "LM Studio packaged for NixOS - desktop GUI and headless server/CLI for local LLM inference with GPU injection",
   "topics": [
     "nix",

@@ -64,6 +64,12 @@ in
 
     users.groups.lmstudio = { };
 
+    systemd.tmpfiles.settings."10-lmstudio".${toString cfg.dataDir}.d = {
+      user = "lmstudio";
+      group = "lmstudio";
+      mode = "0755";
+    };
+
     systemd.services.lmstudio = {
       description = "LM Studio daemon (llmster) and its API server";
       after = [ "network.target" ];
@@ -81,7 +87,6 @@ in
         // {
           User = "lmstudio";
           Group = "lmstudio";
-          StateDirectory = "lmstudio";
         };
     };
 

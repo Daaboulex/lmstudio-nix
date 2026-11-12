@@ -84,8 +84,9 @@ While LM Studio is running it only prints a warning, which asks you to quit the
 app and activate again.
 
 The NixOS daemon runs with `dataDir` as its `HOME`, so its state lives under
-`/var/lib/lmstudio`. The unit's state directory is fixed at `lmstudio`, which
-is `/var/lib/lmstudio`, whatever `dataDir` says.
+it, `/var/lib/lmstudio` by default. The module creates that directory through
+systemd-tmpfiles, owned by the `lmstudio` user and group, wherever `dataDir`
+points.
 
 ## How the daemon runs
 
