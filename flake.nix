@@ -30,7 +30,15 @@
         "aarch64-linux"
       ];
 
-      imports = [ inputs.std.flakeModules.base ];
+      imports = [
+        inputs.std.flakeModules.base
+        {
+          perSystem.std.option-reference = {
+            "NixOS module" = ./nixos-module.nix;
+            "Home Manager module" = ./hm-module.nix;
+          };
+        }
+      ];
 
       flake.overlays.default =
         final: _prev:
