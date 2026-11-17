@@ -21,22 +21,22 @@
   },
   "bionic": {
     "x86_64-linux": {
-      "version": "1.2.0-2",
-      "hash": "sha256-COnpmE7aq93FwppiJmRsPoI+qibXIT2/4dAQXhnjgw0="
+      "version": "1.2.1-10",
+      "hash": "sha256-doqBFreJa6ty9vM4Hc3ojBP5+hcz86AD/1IdRr5bU1Q="
     },
     "aarch64-linux": {
-      "version": "1.2.0-2",
-      "hash": "sha256-kUxxYLYgTdMcuzlVpqte3cUZ30QvuS26eXNDEz2b9lg="
+      "version": "1.2.1-10",
+      "hash": "sha256-j876XmHhFyXnmZOhKX49gZyj/aI6n3yTSS8lP9MxUUU="
     }
   },
   "server": {
     "x86_64-linux": {
-      "version": "0.0.27-1",
-      "hash": "sha256-k5iq9HB7okQ/fpG+qLNaiR/0vwnZ4hdMYBpIiOK1938="
+      "version": "0.1.0-2",
+      "hash": "sha256-p39w483pdHzzWFSWuNkzakOuU/XoqiopLXqvVJ6lrjE="
     },
     "aarch64-linux": {
-      "version": "0.0.27-1",
-      "hash": "sha256-Ctk0PndGoSdZeP20folEKiMocF07MuScwpqzybPnSTE="
+      "version": "0.1.0-2",
+      "hash": "sha256-WHiFvGbPPp9nkcKSZBe8tNCmAdC3OjM30KO7WuAEXNI="
     }
   }
 }
