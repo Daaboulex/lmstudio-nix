@@ -1,22 +1,22 @@
 {
   "stable": {
     "x86_64-linux": {
-      "version": "0.4.28-2",
-      "hash": "sha256-o+bPgjNpe+CorWhxGXtCQkKvPFo0ZnGu7VmVntfuvxE="
+      "version": "0.4.29-2",
+      "hash": "sha256-VchBNZWJ5Y115eGiELkAYFPbTFzvinIZNLJOzGdPX+I="
     },
     "aarch64-linux": {
-      "version": "0.4.28-2",
-      "hash": "sha256-ipmAY1bhZ4RMkp2uMNSfi+jEigqvaJXRfoUWPGY1vNM="
+      "version": "0.4.29-2",
+      "hash": "sha256-Z2HRJOe1RGAYx2CBNfj1ilRioXFMRroSZ+Z4KKM8DpQ="
     }
   },
   "beta": {
     "x86_64-linux": {
-      "version": "0.4.28-2",
-      "hash": "sha256-o+bPgjNpe+CorWhxGXtCQkKvPFo0ZnGu7VmVntfuvxE="
+      "version": "0.4.29-2",
+      "hash": "sha256-VchBNZWJ5Y115eGiELkAYFPbTFzvinIZNLJOzGdPX+I="
     },
     "aarch64-linux": {
-      "version": "0.4.28-2",
-      "hash": "sha256-ipmAY1bhZ4RMkp2uMNSfi+jEigqvaJXRfoUWPGY1vNM="
+      "version": "0.4.29-2",
+      "hash": "sha256-Z2HRJOe1RGAYx2CBNfj1ilRioXFMRroSZ+Z4KKM8DpQ="
     }
   },
   "bionic": {
@@ -31,12 +31,12 @@
   },
   "server": {
     "x86_64-linux": {
-      "version": "0.1.1-2",
-      "hash": "sha256-wcncFzBKi+V0mLQqFj3TCspmJmiLESL9Q16DN8LMxLw="
+      "version": "0.1.2-1",
+      "hash": "sha256-5KUtvIUm32K0xD1BK26UChFREJtGLJcr3zGuVpb/zqU="
     },
     "aarch64-linux": {
-      "version": "0.1.1-2",
-      "hash": "sha256-c0O+ZfB4HJoZCBKI5u4+Kjh1kNUQzNRFwo9ZSxZhRt4="
+      "version": "0.1.2-1",
+      "hash": "sha256-zxhG8j4Iom0C5nwEyPZYsIGZm/GUDlU3BKkFj0wOFg4="
     }
   }
 }
