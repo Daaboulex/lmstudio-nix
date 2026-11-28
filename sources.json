@@ -11,12 +11,12 @@
   },
   "beta": {
     "x86_64-linux": {
-      "version": "0.4.29-2",
-      "hash": "sha256-VchBNZWJ5Y115eGiELkAYFPbTFzvinIZNLJOzGdPX+I="
+      "version": "0.4.30-1",
+      "hash": "sha256-HJHv9qUgX/CZB4L/acqtGkyLM9wrsCmmKHl1DQ6UzM0="
     },
     "aarch64-linux": {
-      "version": "0.4.29-2",
-      "hash": "sha256-Z2HRJOe1RGAYx2CBNfj1ilRioXFMRroSZ+Z4KKM8DpQ="
+      "version": "0.4.30-1",
+      "hash": "sha256-KXV88eKqEWUKFo3hVbCfFvkbPRJqC/J/KrYvBAiKiRQ="
     }
   },
   "bionic": {
